@@ -1,6 +1,7 @@
 import { createCatalog } from "./catalog.js";
 import { canReplaceCoreSound, playClatter, preloadClatter } from "./clatter.js";
 import { getDice } from "./results.js";
+import { registerMlpInteriors } from "./mlp-interiors.js";
 
 const ID = "quick-toss";
 const HIDDEN = "quick-toss-pending";
@@ -162,6 +163,7 @@ Hooks.once("ready", () => {
     game.dice3d = api;
     Hooks.callAll("diceSoNiceInit", api);
     Hooks.callAll("diceSoNiceReady", api);
+    void registerMlpInteriors(api);
     refreshSettings();
     if (canAnimate()) {
         void preloadClatter();

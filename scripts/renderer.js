@@ -123,6 +123,10 @@ export function createRenderer(onTossStart) {
             for (const die of batch.dice) {
                 const t = Math.max(0, Math.min(1, (now - batch.start - die.delay) / TOSS_MS));
                 if (t < 1) moving = true;
+                if (!die.landed) {
+                    die.model.setInteriorProgress?.(t);
+                    die.landed = t === 1;
+                }
                 const remaining = 1 - t;
                 const turn = remaining ** 2;
                 const targetX = ((die.slot % columns) - (columns - 1) / 2) * spacing - width * 0.04;

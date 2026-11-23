@@ -2,9 +2,10 @@ import {
     Box3, BufferGeometry, CanvasTexture, Float32BufferAttribute, Group, Matrix4, Mesh,
     MeshLambertMaterial, Quaternion, SRGBColorSpace, Vector3,
 } from "three";
-import { drawImage, isImageLabel, loadModel, prepareFaces } from "./assets.js";
+import { drawImage, image, isImageLabel, loadModel, prepareFaces } from "./assets.js";
 import { getFace, getResultFace } from "./catalog.js";
 import { layouts } from "./layouts.js";
+import { installInterior } from "./interior.js";
 
 const Z = new Vector3(0, 0, 1);
 const Y = new Vector3(0, 1, 0);
@@ -121,8 +122,10 @@ function paintFaces(spec, plan, art, columns, rows) {
         const face = plan.faces[index];
         const x = index % columns * TILE;
         const y = Math.floor(index / columns) * TILE;
-        ctx.fillStyle = face.text ? background : edge;
-        ctx.fillRect(x, y, TILE, TILE);
+        if (!spec.preset?.interior) {
+            ctx.fillStyle = face.text ? background : edge;
+            ctx.fillRect(x, y, TILE, TILE);
+        }
         if (!face.text) continue;
         ctx.save();
         ctx.globalCompositeOperation = spec.texture?.composite ?? "source-over";
@@ -153,7 +156,7 @@ function paintFaces(spec, plan, art, columns, rows) {
     return texture;
 }
 
-function proceduralDie(spec, plan, art) {
+function proceduralDie(spec, plan, art, mark) {
     // A coin has many thin unnumbered side polygons. All share the last tile.
     const numbered = plan.faces.filter(({ text }) => text);
     const side = plan.faces.find(({ text }) => !text);
@@ -190,11 +193,18 @@ function proceduralDie(spec, plan, art) {
     geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
     geometry.setAttribute("uv", new Float32BufferAttribute(uv, 2));
     const material = new MeshLambertMaterial({ map: texture });
+    const interior = spec.preset?.interior && installInterior(material, spec.preset.interior, mark?.img);
     const face = plan.faces[plan.target];
     return {
         object: new Mesh(geometry, material),
         target: faceRotation(face.normal, face.up),
-        dispose() { geometry.dispose(); material.dispose(); texture.dispose(); },
+        setInteriorProgress: interior?.setProgress,
+        dispose() {
+            interior?.dispose();
+            geometry.dispose();
+            material.dispose();
+            texture.dispose();
+        },
     };
 }
 
@@ -203,9 +213,9 @@ export function planDie(spec) {
     const labels = plan.faces.filter(({ text }) => text);
     if (labels.length < plan.faces.length) labels.push({ text: "", index: 0 });
     return {
-        assets: [loadModel(spec.preset?.modelFile), prepareFaces(spec, labels)],
-        build([model, art] = []) {
-            return (model && modelDie(spec, model, plan)) || proceduralDie(spec, plan, art);
+        assets: [loadModel(spec.preset?.modelFile), prepareFaces(spec, labels), image(spec.preset?.interior?.mark)],
+        build([model, art, mark] = []) {
+            return (model && modelDie(spec, model, plan)) || proceduralDie(spec, plan, art, mark);
         },
     };
 }

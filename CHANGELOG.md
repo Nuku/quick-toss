@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Added MLP Dice Living Inside presets that animate during the toss and freeze on landing.
+
 ## 0.1.3
 
 - Increased the on-screen dice size by 25%.

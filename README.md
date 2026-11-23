@@ -25,9 +25,11 @@ Dice clatter during the toss and follow Foundry's **Interface** volume. Once the
 
 ## Skin compatibility
 
+With MLP Dice active, choose any character’s **Living Inside** preset. Quick Toss uses a simplified animated interior with the character’s colors and cutie mark. Each interior freezes as its die lands and keeps that frame until the die disappears, even if another roll starts.
+
 Quick Toss fires `diceSoNiceInit` and `diceSoNiceReady` with a lightweight registration API. It reads model presets, text and image faces, color palettes, background textures, and TexturePacker atlases registered by active add-ons. A set that only supplies a d20 can be selected alongside the default dice for other sizes. Add-ons that explicitly require Dice So Nice to be *active* may not register with Quick Toss.
 
-Model art uses static lighting and simplified materials. Custom shaders, animation clips, physical collisions, and special effects are outside the renderer. Cold or unavailable assets can fall back to a numbered die on a toss. Once assets are cached, subsequent rolls can use them. Very large throws show up to 16 dice and an omitted-dice count. Foundry's card still shows the full result.
+Model art uses static lighting and simplified materials. Add-on shader callbacks, animation clips, physical collisions, and special effects are outside the renderer. Cold or unavailable assets can fall back to a numbered die on a toss. Once assets are cached, subsequent rolls can use them. Very large throws show up to 16 dice and an omitted-dice count. Foundry's card still shows the full result.
 
 Quick Toss uses Foundry's normal chat visibility. It animates new cards and rolls appended to a previously seen card. It exposes `game.dice3d.waitFor3DAnimationByMessageID(id)` and emits `diceSoNiceRollComplete` for gated cards. Its `showForRoll` API renders on the calling client.
 

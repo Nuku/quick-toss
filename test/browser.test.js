@@ -83,6 +83,9 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     });
     context.after(releaseRecording);
     page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error" && message.text().includes("THREE.WebGLProgram")) errors.push(message.text());
+    });
     page.on("request", (request) => requests.push(request.url()));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     const choices = await page.evaluate(async (nativeAudio) => {
@@ -94,6 +97,20 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         };
         const settings = new Map();
         const values = new Map();
+        const context = WebGL2RenderingContext.prototype;
+        const timeLocations = new WeakSet();
+        const getLocation = context.getUniformLocation;
+        const setFloat = context.uniform1f;
+        window.interiorTimes = [];
+        context.getUniformLocation = function (program, name) {
+            const location = getLocation.call(this, program, name);
+            if (location && name === "uQuickInteriorTime") timeLocations.add(location);
+            return location;
+        };
+        context.uniform1f = function (location, value) {
+            if (timeLocations.has(location)) window.interiorTimes.push(value);
+            return setFloat.call(this, location, value);
+        };
         let fallbackHits = 0;
         let analyser;
         window.game = {
@@ -187,6 +204,14 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             return { hidden, shown, revealed, revealMs, opaque, red: Math.round(red / opaque),
                 peak, fallbacks: fallbackHits - previousFallbacks, coreSound: message.sound };
         };
+        window.firstDiePixels = () => {
+            const canvas = document.querySelector("#quick-toss-layer canvas");
+            const gl = canvas.getContext("webgl2");
+            const pixels = new Uint8Array(72 * 72 * 4);
+            // The first slot in this test's 900×600 viewport.
+            gl.readPixels(83, 330, 72, 72, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            return Array.from(pixels);
+        };
         return { scope: settings.get("quick-toss.system").scope, presets: settings.get("quick-toss.system").choices };
     }, Boolean(foundryRoot));
     assert.equal(choices.scope, "user");
@@ -232,6 +257,19 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.notDeepEqual([skinned.opaque, skinned.red], [fallback.opaque, fallback.red],
         "the add-on model renders differently from a procedural die with the same colors");
     assert.ok(requests.some((url) => url.endsWith("/skins/applejack/d20.glb")));
+
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    await page.waitForFunction(() => game.settings.settings.get("quick-toss.system").choices["mlp-dice-applejack-living"]);
+    const living = await page.evaluate(() => throwMessage("living", "mlp-dice-applejack-living"));
+    assert.equal(living.hidden && living.shown && living.revealed, true);
+    const motionFrames = await page.evaluate(() => window.interiorTimes);
+    assert.ok(new Set(motionFrames).size > 3, "the interior changes across rendered toss frames");
+    assert.equal(motionFrames.at(-1), 0.55, "the interior reaches the character's landing frame");
+    assert.ok(requests.some((url) => url.endsWith("/marks/applejack.png")));
+    const frozen = await page.evaluate(() => firstDiePixels());
+    assert.ok(frozen.some((value) => value !== 0), "the settled Living Inside die produced visible pixels");
+    await page.evaluate(() => throwMessage("after-living", "standard"));
+    assert.deepEqual(await page.evaluate(() => firstDiePixels()), frozen, "another toss preserves the settled interior");
 
     const blind = await page.evaluate(() => throwMessage("blind", "mlp-dice-applejack-skinned", false));
     assert.equal(blind.hidden, false);

@@ -8,7 +8,7 @@ function route(path) {
     return globalThis.foundry?.utils?.getRoute?.(path) ?? path;
 }
 
-function image(path) {
+export function image(path) {
     if (typeof path !== "string" || !path) return Promise.resolve(null);
     if (!images.has(path)) {
         if (images.size >= 128) images.delete(images.keys().next().value);
