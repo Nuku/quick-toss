@@ -33,6 +33,6 @@ Quick Toss uses Foundry's normal chat visibility. It animates new cards and roll
 
 ## Development
 
-Run `npm ci`, `npm run build`, and `npm test`. Set `QUICK_TOSS_BROWSER` to a Chromium browser executable to add the WebGL smoke test, which uses the adjacent `mlp-dice` checkout as an actual skin pack.
+Run `npm ci`, `npm run build`, and `npm test`. Set `QUICK_TOSS_BROWSER` to a Chromium browser executable to add the WebGL smoke test, which uses the adjacent `mlp-dice` checkout as an actual skin pack. Set `QUICK_TOSS_FOUNDRY_APP` to your Foundry v14 `resources/app` directory to also verify playback using Foundry's audio classes.
 
 [Dice So Nice customization API](https://riccisi.gitlab.io/foundryvtt-dice-so-nice/api/customization/) · [Foundry chat render hook](https://foundryvtt.com/api/v14/functions/hookEvents.renderChatMessageHTML.html)

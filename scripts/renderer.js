@@ -108,8 +108,10 @@ export function createRenderer(onTossStart) {
         }
         resize();
         const columns = width < 580 ? 4 : 6;
-        const size = Math.max(18, Math.min(43, width / (columns * 3.1), height / 14));
-        const spacing = size * 2.45;
+        const size = Math.max(18, Math.min(43, width / (columns * 3.1), height / 14)) * 1.25;
+        const spacing = size * 2.2;
+        const lastRow = Math.floor(Math.max(...slots) / columns);
+        const gridTop = Math.min(height / 2 - size, Math.max(height * 0.11, lastRow * spacing + size - height / 2));
         let moving = false;
         const starting = [];
         const landed = [];
@@ -124,7 +126,7 @@ export function createRenderer(onTossStart) {
                 const remaining = 1 - t;
                 const turn = remaining ** 2;
                 const targetX = ((die.slot % columns) - (columns - 1) / 2) * spacing - width * 0.04;
-                const targetY = height * 0.11 - Math.floor(die.slot / columns) * spacing;
+                const targetY = gridTop - Math.floor(die.slot / columns) * spacing;
                 const enterX = die.side * (width / 2 + size * 1.5);
                 const bounce = Math.abs(Math.sin(t * Math.PI * 2.5)) * remaining ** 2 * size * 2.45;
                 const x = targetX + (enterX - targetX) * remaining ** 3;
@@ -137,7 +139,7 @@ export function createRenderer(onTossStart) {
             }
             const settled = now - batch.start >= TOSS_MS + batch.delay;
             if (!batch.expiry && settled) landed.push(batch);
-            position(batch.overflow, -width * 0.04, height * 0.11 + size * 1.5, settled);
+            position(batch.overflow, -width * 0.04, Math.min(gridTop + size * 1.5, height / 2 - 12), settled);
         }
         try {
             webgl.render(scene, camera);
@@ -147,7 +149,9 @@ export function createRenderer(onTossStart) {
             return;
         }
         layer.hidden = false;
-        for (const batch of starting) onTossStart?.(batch.dice.length);
+        for (const batch of starting) {
+            if (batch.playSound) onTossStart?.(batch.dice.length);
+        }
         for (const batch of landed) {
             batch.resolve(true);
             batch.expiry = setTimeout(() => {
@@ -158,7 +162,7 @@ export function createRenderer(onTossStart) {
         if (moving) schedule();
     }
 
-    async function toss(specs, sourceCount) {
+    async function toss(specs, sourceCount, playSound = true) {
         if (lost) return false;
         const requestGeneration = generation;
         const requested = specs.slice(0, MAX_ON_SCREEN);
@@ -179,7 +183,7 @@ export function createRenderer(onTossStart) {
         const dice = [];
         let resolveBatch;
         const completion = new Promise((resolve) => { resolveBatch = resolve; });
-        const batch = { dice, group, resolve: resolveBatch, delay: 0 };
+        const batch = { dice, group, playSound, resolve: resolveBatch, delay: 0 };
         try {
             const side = Math.random() < 0.5 ? -1 : 1;
             for (let index = 0; index < count; index++) {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Increased the on-screen dice size by 25%.
+- Play recorded dice clatter through Foundry's native audio engine and wait for Foundry to unlock audio.
+
 ## 0.1.2
 
 - Preloaded recorded clatter and added Foundry's stock dice sound for rolls while it loads.

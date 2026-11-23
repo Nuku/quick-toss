@@ -1,5 +1,5 @@
 import { createCatalog } from "./catalog.js";
-import { playClatter, preloadClatter } from "./clatter.js";
+import { canReplaceCoreSound, playClatter, preloadClatter } from "./clatter.js";
 import { getDice } from "./results.js";
 
 const ID = "quick-toss";
@@ -82,7 +82,7 @@ function reveal(entry, shown) {
 async function toss(dice, count, look, entry) {
     const instance = await rendererPromise();
     if (!instance || !canAnimate() || (entry && pending.get(entry.id) !== entry)) return false;
-    return instance.toss(dice.map((die) => ({ ...die, ...catalog.resolve(die, look) })), count);
+    return instance.toss(dice.map((die) => ({ ...die, ...catalog.resolve(die, look) })), count, entry?.playSound);
 }
 
 function startChatToss(message, rolls) {
@@ -92,13 +92,14 @@ function startChatToss(message, rolls) {
     const { dice, count } = getDice(rolls);
     if (!dice.length) return;
     const look = message.getFlag(ID, "appearance");
-    const entry = { id: message.id, message, elements: new Set() };
+    const playSound = message.sound !== "sounds/dice.wav" || canReplaceCoreSound();
+    const entry = { id: message.id, message, playSound, elements: new Set() };
     entry.promise = new Promise((resolve) => { entry.resolve = resolve; });
     pending.set(entry.id, entry);
     message._dice3danimating = true;
     entry.timeout = setTimeout(() => reveal(entry, false), 1800);
     for (const html of renderedCards(entry.id)) hide(entry, html);
-    if (message.sound === "sounds/dice.wav") delete message.sound;
+    if (playSound && message.sound === "sounds/dice.wav") delete message.sound;
     Hooks.callAll("diceSoNiceMessageProcessed", entry.id, { willTrigger3DRoll: true });
 
     toss(dice, count, look, entry)
