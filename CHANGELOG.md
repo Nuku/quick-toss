@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Added Living Inside presets from Pony Pantheon, From the Ashes, and Best of the Best.
+- Documented how any dice pack can register a lightweight Living Inside preset.
+
 ## 0.1.4
 
 - Added MLP Dice Living Inside presets that animate during the toss and freeze on landing.

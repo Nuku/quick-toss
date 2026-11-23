@@ -47,4 +47,12 @@ test("discovers grouped presets, theme defaults, art, and per-player overrides",
     assert.equal(override.preset.modelFile, "d20.glb");
     assert.equal(override.texture.source, "grain.png");
     assert.equal(catalog.resolve({ type: "d6" }, { system: "custom" }).preset, undefined);
+
+    assert.equal(api.supportsLivingInteriors, true);
+    const interior = { palette: ["#20133e", "#6340a2", "#f18cd8"], motion: "motes", speed: 0.8 };
+    api.addDicePreset({ type: "d20", system: "portable-interior", interior });
+    assert.equal(api.hasLivingInterior("portable-interior"), true);
+    assert.deepEqual(catalog.resolve(die, { system: "portable-interior" }).preset.interior, interior);
+    api.addDicePreset({ type: "d20", system: "invalid-interior", interior: { palette: ["red"] } });
+    assert.equal(api.hasLivingInterior("invalid-interior"), false);
 });

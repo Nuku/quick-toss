@@ -1,6 +1,14 @@
 const standard = "standard";
 const noop = () => {};
 const done = async () => {};
+const color = /^#[0-9a-f]{6}$/i;
+
+function readInterior(interior) {
+    const palette = interior?.palette;
+    if (!Array.isArray(palette) || palette.length !== 3
+        || !palette.every((value) => typeof value === "string" && color.test(value))) return undefined;
+    return { ...interior, palette: [...palette] };
+}
 
 class DiceSystem {
     static DICE_EVENT_TYPE = Object.freeze({
@@ -32,6 +40,10 @@ export function createCatalog(onChange = noop) {
 
     const api = {
         DiceSystem,
+        supportsLivingInteriors: true,
+        hasLivingInterior(id) {
+            return Array.from(presets.get(id)?.values() ?? []).some((preset) => Boolean(preset.interior));
+        },
         addSystem(system) {
             if (typeof system?.id !== "string") return;
             systems.set(system.id, system);
@@ -41,7 +53,8 @@ export function createCatalog(onChange = noop) {
             if (typeof preset?.type !== "string") return;
             const system = preset.system || standard;
             if (!presets.has(system)) presets.set(system, new Map());
-            presets.get(system).set(preset.type, { ...preset, shape: shape || preset.shape });
+            presets.get(system).set(preset.type, { ...preset, shape: shape || preset.shape,
+                interior: readInterior(preset.interior) });
             onChange();
         },
         async addColorset(colorset) {
@@ -69,6 +82,13 @@ export function createCatalog(onChange = noop) {
 
     return {
         api,
+        interiorSource(id) {
+            const system = systems.get(id);
+            const die = presets.get(id)?.get("d20");
+            if (!system || !die) return null;
+            return { name: system.name, group: system.group, label: die.labels?.[19],
+                background: colorsets.get(die.colorset)?.background ?? "#51464C" };
+        },
         choices(localize) {
             const systemChoices = [[standard, "Standard"]];
             for (const [id, dice] of presets) {

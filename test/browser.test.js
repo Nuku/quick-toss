@@ -9,6 +9,13 @@ import test from "node:test";
 const browserPath = process.env.QUICK_TOSS_BROWSER;
 const foundryPath = process.env.QUICK_TOSS_FOUNDRY_APP;
 const foundryRoot = foundryPath ? pathToFileURL(resolve(foundryPath) + sep) : null;
+const modulesPath = process.env.QUICK_TOSS_FOUNDRY_MODULES;
+const modulesRoot = modulesPath ? pathToFileURL(resolve(modulesPath) + sep) : null;
+const packs = [
+    ["princess-luminaces-guide-to-the-pony-pantheon", "deity-dice.js"],
+    ["ponyfinder-from-the-ashes", "ashen-dice.js"],
+    ["best-of-the-best", "heritage-dice.js"],
+];
 const root = new URL("../", import.meta.url);
 const mlp = new URL("../../mlp-dice/", import.meta.url);
 const audioFiles = new Map([
@@ -41,13 +48,16 @@ async function serve(request, response) {
     }
     const allowed = /^\/(?:scripts|dist|styles|assets)\/[\w./-]+$/;
     const addon = /^\/modules\/mlp-dice\/(?:scripts|assets)\/[\w./-]+$/;
+    const pack = modulesRoot && /^\/modules\/([\w-]+)\/(?:scripts|assets\/dice)\/[\w./-]+$/.exec(path);
+    const installedPack = pack && packs.some(([id]) => id === pack[1]);
     const audioFile = foundryRoot && audioFiles.get(path);
-    if (path.split("/").includes("..") || (!audioFile && !allowed.test(path) && !addon.test(path))) {
+    if (path.split("/").includes("..") || (!audioFile && !allowed.test(path) && !addon.test(path) && !installedPack)) {
         response.writeHead(404).end();
         return;
     }
     try {
         const url = audioFile ? new URL(audioFile, foundryRoot)
+            : installedPack ? new URL(path.slice("/modules/".length), modulesRoot)
             : addon.test(path) ? new URL(path.slice("/modules/mlp-dice/".length), mlp)
             : new URL(path.slice(1), root);
         const file = await readFile(url);
@@ -88,7 +98,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     });
     page.on("request", (request) => requests.push(request.url()));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
-    const choices = await page.evaluate(async (nativeAudio) => {
+    const choices = await page.evaluate(async ({ nativeAudio, installedPacks }) => {
         const listeners = new Map();
         const on = (key, callback) => listeners.set(key, [...(listeners.get(key) ?? []), callback]);
         window.Hooks = {
@@ -149,7 +159,11 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
                 game.audio.interface.gainNode.connect(analyser);
             });
         }
-        await Promise.all([import("/scripts/main.js"), import("/modules/mlp-dice/scripts/mlp-dice.js")]);
+        for (const [id] of installedPacks) game.modules.set(id, { active: true });
+        await Promise.all([
+            import("/scripts/main.js"), import("/modules/mlp-dice/scripts/mlp-dice.js"),
+            ...installedPacks.map(([id, file]) => import(`/modules/${id}/scripts/${file}`)),
+        ]);
         Hooks.callAll("init");
         Hooks.callAll("ready");
         game.dice3d.addSystem({ id: "fallback", name: "Fallback comparison" });
@@ -213,7 +227,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             return Array.from(pixels);
         };
         return { scope: settings.get("quick-toss.system").scope, presets: settings.get("quick-toss.system").choices };
-    }, Boolean(foundryRoot));
+    }, { nativeAudio: Boolean(foundryRoot), installedPacks: modulesRoot ? packs : [] });
     assert.equal(choices.scope, "user");
     assert.match(choices.presets["mlp-dice-applejack-skinned"], /Applejack/);
     assert.equal(await page.evaluate(() => getComputedStyle(card(makeMessage("old"))).display === "none"), false);
@@ -268,9 +282,28 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.ok(requests.some((url) => url.endsWith("/marks/applejack.png")));
     const frozen = await page.evaluate(() => firstDiePixels());
     assert.ok(frozen.some((value) => value !== 0), "the settled Living Inside die produced visible pixels");
-    await page.evaluate(() => throwMessage("after-living", "standard"));
+    const nextPreset = modulesRoot ? `${packs[0][0]}-pantheon-living` : "standard";
+    const next = await page.evaluate((system) => throwMessage("after-living", system), nextPreset);
+    assert.ok(next.opaque > living.opaque);
     assert.deepEqual(await page.evaluate(() => firstDiePixels()), frozen, "another toss preserves the settled interior");
 
+    if (modulesRoot) {
+        assert.ok(choices.presets[nextPreset]);
+        assert.ok(requests.some((url) => url.endsWith("/deities/pantheon-symbols.png")));
+        for (const system of [
+            `${packs[0][0]}-deity-princess-luminace-living`,
+            `${packs[1][0]}-ashen-living`,
+            `${packs[2][0]}-heritage-dynastic-kirin-living`,
+        ]) {
+            assert.match(choices.presets[system], /Living Inside/);
+            const roll = await page.evaluate((preset) => throwMessage(preset, preset), system);
+            assert.equal(roll.hidden && roll.shown && roll.revealed, true);
+            assert.ok(roll.opaque > 500);
+        }
+        for (const crest of ["/deities/emblems/princess-luminace.png", "/ashen/natural-20.png", "/heritages/dynastic-kirin.png"]) {
+            assert.ok(requests.some((url) => url.endsWith(crest)), crest);
+        }
+    }
     const blind = await page.evaluate(() => throwMessage("blind", "mlp-dice-applejack-skinned", false));
     assert.equal(blind.hidden, false);
     assert.equal(blind.revealed, true);

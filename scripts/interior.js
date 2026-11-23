@@ -19,6 +19,7 @@ const fragment = `
     uniform vec3 uQuickInteriorGlow;
     uniform sampler2D uQuickInteriorMark;
     uniform float uQuickInteriorHasMark;
+    uniform float uQuickInteriorOrbit;
     varying vec3 vQuickInteriorPosition;
     varying vec3 vQuickInteriorView;
     varying vec2 vQuickInteriorPlane;
@@ -73,6 +74,7 @@ export function installInterior(material, spec, image) {
             uQuickInteriorGlow: { value: new Color(glow) },
             uQuickInteriorMark: { value: mark ?? material.map },
             uQuickInteriorHasMark: { value: mark ? 1 : 0 },
+            uQuickInteriorOrbit: { value: spec.orbit ? 1 : 0 },
         });
         shader.vertexShader = shader.vertexShader.replace("#include <common>", `
             #include <common>
@@ -99,9 +101,24 @@ export function installInterior(material, spec, image) {
             resin = mix(resin, uQuickInteriorGlow, 0.76 * density);
             if (uQuickInteriorHasMark > 0.5) {
                 vec2 drift = 0.12 * vec2(sin(3.0 * uQuickInteriorTime), cos(2.5 * uQuickInteriorTime));
-                vec2 markUV = (vQuickInteriorPlane - drift) / 0.86 + 0.5;
-                if (all(greaterThanEqual(markUV, vec2(0.0))) && all(lessThanEqual(markUV, vec2(1.0)))) {
-                    vec4 emblem = texture2D(uQuickInteriorMark, markUV);
+                vec2 uv = (vQuickInteriorPlane - drift) / 0.86 + 0.5;
+                vec2 tile = vec2(0.0);
+                vec2 grid = vec2(1.0);
+                if (uQuickInteriorOrbit > 0.5) {
+                    const float spacing = 0.52359878;
+                    float orbit = uQuickInteriorTime * 1.4;
+                    float index = floor((atan(vQuickInteriorPlane.y, vQuickInteriorPlane.x + 0.0001) - orbit)
+                        / spacing + 0.5);
+                    float angle = index * spacing + orbit;
+                    float ring = 0.48 + 0.055 * sin(3.0 * angle + uQuickInteriorTime * 4.0);
+                    vec2 center = vec2(cos(angle), sin(angle)) * ring;
+                    uv = (vQuickInteriorPlane - center) / 0.22 + 0.5;
+                    index = mod(index, 12.0);
+                    tile = vec2(mod(index, 4.0), 2.0 - floor(index / 4.0));
+                    grid = vec2(4.0, 3.0);
+                }
+                if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
+                    vec4 emblem = texture2D(uQuickInteriorMark, (tile + uv) / grid);
                     resin = mix(resin, emblem.rgb, emblem.a * core * 0.86);
                 }
             }

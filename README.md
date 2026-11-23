@@ -25,7 +25,7 @@ Dice clatter during the toss and follow Foundry's **Interface** volume. Once the
 
 ## Skin compatibility
 
-With MLP Dice active, choose any character’s **Living Inside** preset. Quick Toss uses a simplified animated interior with the character’s colors and cutie mark. Each interior freezes as its die lands and keeps that frame until the die disappears, even if another roll starts.
+**Living Inside** presets are available from active copies of MLP Dice, Pony Pantheon, From the Ashes, and Best of the Best. Quick Toss uses the packs’ artwork and simplified animated interiors. Each interior freezes as its die lands and keeps that frame until the die disappears, even if another roll starts.
 
 Quick Toss fires `diceSoNiceInit` and `diceSoNiceReady` with a lightweight registration API. It reads model presets, text and image faces, color palettes, background textures, and TexturePacker atlases registered by active add-ons. A set that only supplies a d20 can be selected alongside the default dice for other sizes. Add-ons that explicitly require Dice So Nice to be *active* may not register with Quick Toss.
 
@@ -35,6 +35,29 @@ Quick Toss uses Foundry's normal chat visibility. It animates new cards and roll
 
 ## Development
 
-Run `npm ci`, `npm run build`, and `npm test`. Set `QUICK_TOSS_BROWSER` to a Chromium browser executable to add the WebGL smoke test, which uses the adjacent `mlp-dice` checkout as an actual skin pack. Set `QUICK_TOSS_FOUNDRY_APP` to your Foundry v14 `resources/app` directory to also verify playback using Foundry's audio classes.
+### Registering a Living Inside preset
+
+Any active add-on can register a Quick Toss interior through `diceSoNiceReady`. Check `dice3d.supportsLivingInteriors`, register a system with `addSystem`, and include an `interior` object in each procedural `addDicePreset` call.
+
+```js
+Hooks.once("diceSoNiceReady", (dice3d) => {
+    if (!dice3d.supportsLivingInteriors) return;
+    dice3d.addSystem({ id: "my-pack-interior", name: "My Pack (Living Inside)" });
+    dice3d.addDicePreset({
+        type: "d20",
+        system: "my-pack-interior",
+        interior: {
+            palette: ["#171128", "#61388A", "#EBA8FF"],
+            motion: "motes",
+            speed: 0.8,
+            mark: "modules/my-pack/assets/sigil.png",
+        },
+    });
+});
+```
+
+The palette contains the shadow, body color, and highlight. The optional motion is one of `arcana`, `motes`, `prism`, `smoke`, or `vortices`. The optional speed controls how far the effect advances during the toss. The optional mark is a transparent image. Packs that only register Dicer shader callbacks need an adapter or a data registration like this.
+
+Run `npm ci`, `npm run build`, and `npm test`. Set `QUICK_TOSS_BROWSER` to a Chromium browser executable to add the WebGL smoke test, which uses the adjacent `mlp-dice` checkout as an actual skin pack. Set `QUICK_TOSS_FOUNDRY_APP` to your Foundry v14 `resources/app` directory to also verify playback using Foundry's audio classes. With all three supported Ponyfinder packs installed, set `QUICK_TOSS_FOUNDRY_MODULES` to your Foundry `Data/modules` directory to test their presets too.
 
 [Dice So Nice customization API](https://riccisi.gitlab.io/foundryvtt-dice-so-nice/api/customization/) · [Foundry chat render hook](https://foundryvtt.com/api/v14/functions/hookEvents.renderChatMessageHTML.html)
