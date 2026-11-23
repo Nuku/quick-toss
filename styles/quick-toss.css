@@ -1,0 +1,35 @@
+.quick-toss-pending {
+    display: none !important;
+}
+
+#quick-toss-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 80;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    contain: strict;
+}
+
+#quick-toss-layer > canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#quick-toss-layer[hidden] {
+    display: none;
+}
+
+.quick-toss-result {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: #fff;
+    background: #192132;
+    font: 700 14px system-ui, sans-serif;
+}
