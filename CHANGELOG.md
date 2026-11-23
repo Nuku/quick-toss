@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Preloaded recorded clatter and added Foundry's stock dice sound for rolls while it loads.
+- Increased recorded clatter volume while continuing to use Foundry's Interface volume.
+
 ## 0.1.1
 
 - Added recorded dice clatter that follows Foundry's interface volume.

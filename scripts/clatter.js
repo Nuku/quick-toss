@@ -6,21 +6,42 @@ const hits = [
     [[3.5183, 0.1025], [3.6708, 0.067], [3.7878, 0.083]],
 ];
 const times = [0.12, 0.19, 0.27, 0.40, 0.46, 0.57];
-let bufferPromise;
+const volumes = [0.9, 0.65, 0.4];
+let buffer;
+let loading = false;
+let retryAfter = 0;
+
+export async function preloadClatter() {
+    if (buffer || loading || Date.now() < retryAfter) return;
+    loading = true;
+    try {
+        const response = await fetch(sprite);
+        if (!response.ok) throw new Error(`Dice audio returned HTTP ${response.status}`);
+        const decoder = new OfflineAudioContext(1, 1, 48000);
+        buffer = await decoder.decodeAudioData(await response.arrayBuffer());
+    } catch (error) {
+        retryAfter = Date.now() + 10_000;
+        console.debug("Quick Toss | Recorded dice sound unavailable", error);
+    } finally {
+        loading = false;
+    }
+}
 
 export async function playClatter(diceCount) {
     const audio = game.audio;
     const context = audio?.interface;
-    if (audio?.globalMute || context?.state !== "running") return;
+    if (!context || audio.globalMute || context.state === "closed") return;
     const started = performance.now();
     try {
-        bufferPromise ??= fetch(sprite).then((response) => {
-            if (!response.ok) throw new Error("Missing dice audio");
-            return response.arrayBuffer();
-        }).then((data) => context.decodeAudioData(data)).catch(() => null);
-        const buffer = await bufferPromise;
+        if (context.state !== "running") await context.resume();
+        if (document.hidden || audio.globalMute || context.state !== "running") return;
         const elapsed = (performance.now() - started) / 1000;
-        if (!buffer || elapsed > 0.25 || document.hidden || audio.globalMute || context.state !== "running") return;
+        if (elapsed > 0.4) return;
+        if (!buffer) {
+            void preloadClatter();
+            await audio.play("sounds/dice.wav", { context });
+            return;
+        }
         const count = Math.min(diceCount + 2, times.length);
         const when = context.currentTime;
         for (let index = 0; index < count; index++) {
@@ -32,7 +53,7 @@ export async function playClatter(diceCount) {
             const source = context.createBufferSource();
             source.buffer = buffer;
             const gain = context.createGain();
-            gain.gain.value = [0.55, 0.38, 0.23][level];
+            gain.gain.value = volumes[level];
             source.connect(gain).connect(context.gainNode ?? context.destination);
             source.onended = () => {
                 source.disconnect();

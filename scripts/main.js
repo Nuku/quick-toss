@@ -1,5 +1,5 @@
 import { createCatalog } from "./catalog.js";
-import { playClatter } from "./clatter.js";
+import { playClatter, preloadClatter } from "./clatter.js";
 import { getDice } from "./results.js";
 
 const ID = "quick-toss";
@@ -133,7 +133,10 @@ Hooks.once("init", () => {
         scope: "client", config: true, type: Boolean, default: true,
         onChange: (value) => {
             if (!value) stopAnimations();
-            else if (canAnimate()) void rendererPromise();
+            else if (canAnimate()) {
+                void preloadClatter();
+                void rendererPromise();
+            }
         },
     });
     const entries = {
@@ -160,6 +163,7 @@ Hooks.once("ready", () => {
     Hooks.callAll("diceSoNiceReady", api);
     refreshSettings();
     if (canAnimate()) {
+        void preloadClatter();
         if (globalThis.requestIdleCallback) requestIdleCallback(() => void rendererPromise(), { timeout: 2000 });
         else setTimeout(() => void rendererPromise(), 0);
     }

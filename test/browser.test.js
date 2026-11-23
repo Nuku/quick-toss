@@ -50,6 +50,13 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
     const errors = [];
     const requests = [];
+    let releaseRecording;
+    const recordingGate = new Promise((resolve) => { releaseRecording = resolve; });
+    await page.route("**/assets/dice-hits.mp3", async (route) => {
+        await recordingGate;
+        await route.continue();
+    });
+    context.after(releaseRecording);
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("request", (request) => requests.push(request.url()));
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -66,6 +73,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         await audio.resume();
         const createBufferSource = audio.createBufferSource.bind(audio);
         window.clatterHits = 0;
+        window.fallbackHits = 0;
         audio.createBufferSource = () => {
             const source = createBufferSource();
             const start = source.start.bind(source);
@@ -77,7 +85,13 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         };
         window.game = {
             i18n: { localize: (key) => key }, user: { id: "player" },
-            audio: { interface: audio, globalMute: false },
+            audio: {
+                interface: audio, globalMute: false,
+                async play(src, { context }) {
+                    if (src !== "sounds/dice.wav" || context !== audio) throw new Error("Wrong dice audio route");
+                    window.fallbackHits += 1;
+                },
+            },
             modules: new Map([["quick-toss", {}], ["mlp-dice", { active: true }]]),
             settings: {
                 settings,
@@ -112,6 +126,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             Hooks.callAll("preCreateChatMessage", message);
             const started = performance.now();
             const previousHits = window.clatterHits;
+            const previousFallbacks = window.fallbackHits;
             Hooks.callAll("createChatMessage", message);
             const html = card(message);
             const hidden = getComputedStyle(html).display === "none";
@@ -131,7 +146,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
                 }
             }
             return { hidden, shown, revealed, revealMs, opaque, red: Math.round(red / opaque),
-                hits: window.clatterHits - previousHits };
+                hits: window.clatterHits - previousHits, fallbacks: window.fallbackHits - previousFallbacks };
         };
         return { scope: settings.get("quick-toss.system").scope, presets: settings.get("quick-toss.system").choices };
     });
@@ -140,10 +155,11 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.equal(await page.evaluate(() => getComputedStyle(card(makeMessage("old"))).display === "none"), false);
 
     const standard = await page.evaluate(() => throwMessage("plain", "standard"));
+    releaseRecording();
     assert.equal(standard.hidden && standard.shown && standard.revealed, true);
     assert.ok(standard.opaque > 500, "default dice produce visible WebGL pixels");
     assert.ok(standard.revealMs >= 650 && standard.revealMs < 1700, "chat reveals at landing");
-    assert.ok(standard.hits > 0, "recorded clatter is decoded and scheduled during the toss");
+    assert.equal(standard.fallbacks, 1, "the first toss plays Foundry's dice sound while the recording is loading");
     await page.evaluate(async () => {
         await new Promise((resolve) => setTimeout(resolve, 1200));
     });
@@ -153,6 +169,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await page.evaluate(() => { game.audio.globalMute = true; });
     const fallback = await page.evaluate(() => throwMessage("fallback", "fallback"));
     assert.equal(fallback.hits, 0, "global mute suppresses clatter");
+    assert.equal(fallback.fallbacks, 0, "global mute suppresses stock audio too");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
     await page.evaluate(() => { game.audio.globalMute = false; });
     await page.evaluate(() => throwMessage("warm", "mlp-dice-applejack-skinned"));
@@ -160,6 +177,8 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const skinned = await page.evaluate(() => throwMessage("skin", "mlp-dice-applejack-skinned"));
     assert.equal(skinned.hidden && skinned.shown && skinned.revealed, true);
     assert.ok(skinned.opaque > 500);
+    assert.ok(skinned.hits > 0, "decoded clatter is scheduled during the toss");
+    assert.equal(skinned.fallbacks, 0, "loaded clatter replaces stock dice audio");
     assert.notDeepEqual([skinned.opaque, skinned.red], [fallback.opaque, fallback.red],
         "the add-on model renders differently from a procedural die with the same colors");
     assert.ok(requests.some((url) => url.endsWith("/skins/applejack/d20.glb")));
@@ -168,6 +187,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.equal(blind.hidden, false);
     assert.equal(blind.revealed, true);
     assert.equal(blind.hits, 0);
+    assert.equal(blind.fallbacks, 0);
     await page.emulateMedia({ reducedMotion: "reduce" });
     const reduced = await page.evaluate(() => throwMessage("reduced", "standard"));
     assert.equal(reduced.hidden, false);
