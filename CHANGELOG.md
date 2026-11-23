@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Added recorded dice clatter that follows Foundry's interface volume.
+- Extended the settled dice display by one second. Chat still reveals as soon as the dice land.
+
 ## 0.1.0
 
 - Added fixed-duration 3D dice tosses with a chat reveal on landing.

@@ -1,4 +1,5 @@
 import { createCatalog } from "./catalog.js";
+import { playClatter } from "./clatter.js";
 import { getDice } from "./results.js";
 
 const ID = "quick-toss";
@@ -39,7 +40,7 @@ function canAnimate() {
 function rendererPromise() {
     driver ??= import("../dist/renderer.js")
         .then(({ createRenderer }) => {
-            renderer = createRenderer();
+            renderer = createRenderer(playClatter);
             return renderer;
         })
         .catch((error) => {

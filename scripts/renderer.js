@@ -6,12 +6,12 @@ import { setModelContext } from "./assets.js";
 
 const MAX_ON_SCREEN = 24;
 const TOSS_MS = 720;
-const HOLD_MS = 900;
+const HOLD_MS = 1900;
 const ASSET_BUDGET_MS = 125;
 const SPIN = new Quaternion();
 const AXIS = new Vector3(0.75, 0.55, 0.36).normalize();
 
-export function createRenderer() {
+export function createRenderer(onTossStart) {
     const canvas = document.createElement("canvas");
     const webgl = new WebGLRenderer({
         canvas, alpha: true, antialias: false, powerPreference: "low-power", preserveDrawingBuffer: true,
@@ -111,9 +111,13 @@ export function createRenderer() {
         const size = Math.max(18, Math.min(43, width / (columns * 3.1), height / 14));
         const spacing = size * 2.45;
         let moving = false;
+        const starting = [];
         const landed = [];
         for (const batch of batches) {
-            batch.start ??= now;
+            if (batch.start === undefined) {
+                batch.start = now;
+                starting.push(batch);
+            }
             for (const die of batch.dice) {
                 const t = Math.max(0, Math.min(1, (now - batch.start - die.delay) / TOSS_MS));
                 if (t < 1) moving = true;
@@ -143,6 +147,7 @@ export function createRenderer() {
             return;
         }
         layer.hidden = false;
+        for (const batch of starting) onTossStart?.(batch.dice.length);
         for (const batch of landed) {
             batch.resolve(true);
             batch.expiry = setTimeout(() => {

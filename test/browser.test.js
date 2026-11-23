@@ -9,7 +9,7 @@ const root = new URL("../", import.meta.url);
 const mlp = new URL("../../mlp-dice/", import.meta.url);
 const contentTypes = {
     js: "text/javascript", css: "text/css", png: "image/png", glb: "model/gltf-binary",
-    wasm: "application/wasm",
+    wasm: "application/wasm", mp3: "audio/mpeg",
 };
 
 async function serve(request, response) {
@@ -19,7 +19,7 @@ async function serve(request, response) {
         response.end('<!doctype html><link rel="stylesheet" href="/styles/quick-toss.css"><ol class="chat-log"></ol>');
         return;
     }
-    const allowed = /^\/(?:scripts|dist|styles)\/[\w./-]+$/;
+    const allowed = /^\/(?:scripts|dist|styles|assets)\/[\w./-]+$/;
     const addon = /^\/modules\/mlp-dice\/(?:scripts|assets)\/[\w./-]+$/;
     if (path.split("/").includes("..") || (!allowed.test(path) && !addon.test(path))) {
         response.writeHead(404).end();
@@ -43,7 +43,8 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await new Promise((resolve, reject) => server.once("error", reject).listen(0, "127.0.0.1", resolve));
     context.after(() => server.close());
     const browser = await chromium.launch({
-        executablePath: browserPath, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+        executablePath: browserPath,
+        args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--autoplay-policy=no-user-gesture-required"],
     });
     context.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 900, height: 600 } });
@@ -61,8 +62,22 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         };
         const settings = new Map();
         const values = new Map();
+        const audio = new AudioContext();
+        await audio.resume();
+        const createBufferSource = audio.createBufferSource.bind(audio);
+        window.clatterHits = 0;
+        audio.createBufferSource = () => {
+            const source = createBufferSource();
+            const start = source.start.bind(source);
+            source.start = (...args) => {
+                window.clatterHits += 1;
+                start(...args);
+            };
+            return source;
+        };
         window.game = {
             i18n: { localize: (key) => key }, user: { id: "player" },
+            audio: { interface: audio, globalMute: false },
             modules: new Map([["quick-toss", {}], ["mlp-dice", { active: true }]]),
             settings: {
                 settings,
@@ -95,10 +110,13 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             game.settings.set("quick-toss", "system", system);
             const message = makeMessage(id, visible);
             Hooks.callAll("preCreateChatMessage", message);
+            const started = performance.now();
+            const previousHits = window.clatterHits;
             Hooks.callAll("createChatMessage", message);
             const html = card(message);
             const hidden = getComputedStyle(html).display === "none";
             const shown = await game.dice3d.waitFor3DAnimationByMessageID(id);
+            const revealMs = performance.now() - started;
             const revealed = getComputedStyle(html).display !== "none";
             const canvas = document.querySelector("#quick-toss-layer canvas");
             const gl = canvas?.getContext("webgl2");
@@ -112,7 +130,8 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
                     red += pixels[i - 3];
                 }
             }
-            return { hidden, shown, revealed, opaque, red: Math.round(red / opaque) };
+            return { hidden, shown, revealed, revealMs, opaque, red: Math.round(red / opaque),
+                hits: window.clatterHits - previousHits };
         };
         return { scope: settings.get("quick-toss.system").scope, presets: settings.get("quick-toss.system").choices };
     });
@@ -123,10 +142,19 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const standard = await page.evaluate(() => throwMessage("plain", "standard"));
     assert.equal(standard.hidden && standard.shown && standard.revealed, true);
     assert.ok(standard.opaque > 500, "default dice produce visible WebGL pixels");
-    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    assert.ok(standard.revealMs >= 650 && standard.revealMs < 1700, "chat reveals at landing");
+    assert.ok(standard.hits > 0, "recorded clatter is decoded and scheduled during the toss");
+    await page.evaluate(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+    });
+    assert.equal(await page.locator("#quick-toss-layer").isVisible(), true, "dice linger past the old hold");
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden, null, { timeout: 4000 });
 
+    await page.evaluate(() => { game.audio.globalMute = true; });
     const fallback = await page.evaluate(() => throwMessage("fallback", "fallback"));
+    assert.equal(fallback.hits, 0, "global mute suppresses clatter");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    await page.evaluate(() => { game.audio.globalMute = false; });
     await page.evaluate(() => throwMessage("warm", "mlp-dice-applejack-skinned"));
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
     const skinned = await page.evaluate(() => throwMessage("skin", "mlp-dice-applejack-skinned"));
@@ -139,6 +167,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const blind = await page.evaluate(() => throwMessage("blind", "mlp-dice-applejack-skinned", false));
     assert.equal(blind.hidden, false);
     assert.equal(blind.revealed, true);
+    assert.equal(blind.hits, 0);
     await page.emulateMedia({ reducedMotion: "reduce" });
     const reduced = await page.evaluate(() => throwMessage("reduced", "standard"));
     assert.equal(reduced.hidden, false);
