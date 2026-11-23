@@ -1,5 +1,6 @@
 import { getFace, getResultFace } from "./catalog.js";
 import { image as loadImage, isImageLabel } from "./assets.js";
+import { diceScaleFactor } from "./scale.js";
 
 const cache = new Map();
 const mounted = new WeakMap();
@@ -22,11 +23,13 @@ export function closePreview(app) {
 
 export function mountPreview(app, html, catalog, render) {
     const selects = preferences.map((key) => html.querySelector(`select[name="quick-toss.${key}"]`));
-    const group = selects[0]?.closest(".form-group");
+    const sizePicker = html.querySelector('[name="quick-toss.diceScale"]');
+    const group = (sizePicker ?? selects[0])?.closest(".form-group");
     if (!group || mounted.get(app)?.group === group) return;
     closePreview(app);
 
     const panel = element("figure", "quick-toss-preview");
+    const stage = element("div", "quick-toss-preview-stage");
     const fallback = element("div", "quick-toss-preview-fallback");
     const image = element("img", "quick-toss-preview-image");
     image.alt = "";
@@ -37,8 +40,16 @@ export function mountPreview(app, html, catalog, render) {
     fallback.setAttribute("aria-hidden", "true");
     swatches.setAttribute("aria-hidden", "true");
     caption.append(title, swatches);
-    panel.append(fallback, image, caption);
+    stage.append(fallback, image);
+    panel.append(stage, caption);
     group.append(panel);
+
+    function resizePreview() {
+        stage.style.setProperty("--quick-toss-preview-scale", diceScaleFactor(sizePicker?.valueAsNumber));
+    }
+    resizePreview();
+    sizePicker?.addEventListener("input", resizePreview);
+    sizePicker?.addEventListener("change", resizePreview);
 
     let visible = false;
     let timer;
@@ -117,6 +128,8 @@ export function mountPreview(app, html, catalog, render) {
             clearTimeout(timer);
             job?.abort();
             observer.disconnect();
+            sizePicker?.removeEventListener("input", resizePreview);
+            sizePicker?.removeEventListener("change", resizePreview);
             for (const select of selects) select?.removeEventListener("change", update);
             panel.remove();
         },

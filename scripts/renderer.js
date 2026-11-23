@@ -4,6 +4,7 @@ import {
 } from "three";
 import { planDie } from "./dice.js";
 import { setModelContext } from "./assets.js";
+import { diceScaleFactor } from "./scale.js";
 
 const MAX_ON_SCREEN = 24;
 const TOSS_MS = 720;
@@ -22,7 +23,7 @@ function litScene() {
     return scene;
 }
 
-export function createRenderer(onTossStart) {
+export function createRenderer(onTossStart, initialScale) {
     const canvas = document.createElement("canvas");
     const webgl = new WebGLRenderer({
         canvas, alpha: true, antialias: false, powerPreference: "low-power", preserveDrawingBuffer: true,
@@ -45,6 +46,7 @@ export function createRenderer(onTossStart) {
     let width;
     let height;
     let lost = false;
+    let scale = diceScaleFactor(initialScale);
 
     function resize() {
         if (width === innerWidth && height === innerHeight) return;
@@ -114,10 +116,13 @@ export function createRenderer(onTossStart) {
             return;
         }
         resize();
-        const columns = width < 580 ? 4 : 6;
-        const size = Math.max(18, Math.min(43, width / (columns * 3.1), height / 14)) * 1.25;
-        const spacing = size * 2.2;
+        const baseColumns = width < 580 ? 4 : 6;
+        const baseSize = Math.max(18, Math.min(43, width / (baseColumns * 3.1), height / 14)) * 1.25;
+        const desiredSize = baseSize * scale;
+        const columns = Math.max(1, Math.min(baseColumns, Math.floor(width * 0.92 / (desiredSize * 2.2))));
         const lastRow = Math.floor(Math.max(...slots) / columns);
+        const size = Math.min(desiredSize, width * 0.92 / 2.2, height / ((lastRow + 1) * 2.2));
+        const spacing = size * 2.2;
         const gridTop = Math.min(height / 2 - size, Math.max(height * 0.11, lastRow * spacing + size - height / 2));
         let moving = false;
         const starting = [];
@@ -269,5 +274,10 @@ export function createRenderer(onTossStart) {
     });
     canvas.addEventListener("webglcontextrestored", () => { lost = false; });
     window.addEventListener("resize", () => { if (batches.size) schedule(); });
-    return { toss, clear, preview };
+    function setScale(percent) {
+        scale = diceScaleFactor(percent);
+        if (batches.size) schedule();
+    }
+
+    return { toss, clear, preview, setScale };
 }

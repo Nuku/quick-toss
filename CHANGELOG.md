@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- Added a per-player dice size slider with a live preview of the selected die.
+
 ## 0.1.6
 
 - Added still dice previews and color swatches to Quick Toss appearance settings.

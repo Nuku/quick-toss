@@ -40,14 +40,21 @@
     align-items: center;
     gap: 10px;
     margin: 0;
-    min-height: 72px;
+}
+
+.quick-toss-preview-stage {
+    display: grid;
+    place-items: center;
+    width: 108px;
+    height: 108px;
+    flex: 0 0 108px;
 }
 
 .quick-toss-preview-fallback,
 .quick-toss-preview-image {
     width: 72px;
     height: 72px;
-    flex: 0 0 72px;
+    transform: scale(var(--quick-toss-preview-scale, 1));
 }
 
 .quick-toss-preview-fallback {

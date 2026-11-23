@@ -4,6 +4,7 @@ import { getDice } from "./results.js";
 import { registerMlpInteriors } from "./mlp-interiors.js";
 import { registerPonyfinderInteriors } from "./ponyfinder-interiors.js";
 import { closePreview, mountPreview } from "./preview.js";
+import { DEFAULT_DICE_SCALE, DICE_SCALE_RANGE } from "./scale.js";
 
 const ID = "quick-toss";
 const HIDDEN = "quick-toss-pending";
@@ -43,7 +44,7 @@ function canAnimate() {
 function rendererPromise() {
     driver ??= import("../dist/renderer.js")
         .then(({ createRenderer }) => {
-            renderer = createRenderer(playClatter);
+            renderer = createRenderer(playClatter, setting("diceScale"));
             return renderer;
         })
         .catch((error) => {
@@ -153,6 +154,12 @@ Hooks.once("init", () => {
             name, hint, scope: "user", config: true, type: String, default: defaultValue, choices: {},
         });
     }
+    game.settings.register(ID, "diceScale", {
+        name: "Dice size (%)",
+        hint: "Set the size of dice on your screen. Large rolls may shrink to fit.",
+        scope: "user", config: true, type: Number, default: DEFAULT_DICE_SCALE, range: DICE_SCALE_RANGE,
+        onChange: (value) => renderer?.setScale(value),
+    });
 });
 
 Hooks.once("ready", () => {

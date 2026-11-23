@@ -136,7 +136,11 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
                 settings,
                 register: (id, key, config) => settings.set(`${id}.${key}`, config),
                 get: (id, key) => values.get(`${id}.${key}`) ?? settings.get(`${id}.${key}`).default,
-                set: (id, key, value) => values.set(`${id}.${key}`, value),
+                set: (id, key, value) => {
+                    const name = `${id}.${key}`;
+                    values.set(name, value);
+                    settings.get(name)?.onChange?.(value);
+                },
             },
         };
         if (nativeAudio) {
@@ -334,11 +338,22 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             group.append(select);
             form.append(group);
         }
+        const scaleGroup = document.createElement("div");
+        scaleGroup.className = "form-group";
+        const scale = document.createElement("input");
+        scale.type = "range";
+        scale.name = "quick-toss.diceScale";
+        const { range, scope } = game.settings.settings.get(scale.name);
+        Object.assign(scale, range, { value: "100" });
+        scale.dataset.scope = scope;
+        scaleGroup.append(scale);
+        form.append(scaleGroup);
         form.elements["quick-toss.system"].value = "mlp-dice-rainbow-dash-skinned";
         document.body.prepend(form);
         Hooks.callAll("renderSettingsConfig", window.settingsApp, form);
     });
     const preview = page.locator(".quick-toss-preview-image");
+    const scalePicker = page.locator('[name="quick-toss.diceScale"]');
     const picker = page.locator('select[name="quick-toss.system"]');
     assert.equal(await preview.isVisible(), false);
     assert.ok(!requests.some((url) => url.endsWith("/skins/rainbow-dash/d20.glb")));
@@ -348,6 +363,19 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const modelStill = await preview.getAttribute("src");
     assert.match(modelStill, /^data:image\/png;base64,/);
     assert.ok(requests.some((url) => url.endsWith("/skins/rainbow-dash/d20.glb")));
+    assert.equal(await scalePicker.getAttribute("data-scope"), "user");
+    assert.equal(await scalePicker.locator("..").locator(".quick-toss-preview").count(), 1);
+    const normalWidth = (await preview.boundingBox()).width;
+    const previewBeforeResize = await page.evaluate(() => previewReads);
+    for (const [value, multiplier] of [[50, 0.5], [150, 1.5]]) {
+        await scalePicker.evaluate((input, percent) => {
+            input.value = String(percent);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        }, value);
+        assert.equal((await preview.boundingBox()).width, normalWidth * multiplier);
+        assert.equal(await preview.getAttribute("src"), modelStill);
+    }
+    assert.equal(await page.evaluate(() => previewReads), previewBeforeResize);
     const beforeInterior = await page.evaluate(() => interiorTimes.length);
     await picker.selectOption("mlp-dice-applejack-living");
     await preview.waitFor({ state: "visible" });
@@ -359,5 +387,13 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.equal(await page.evaluate(() => previewReads), rendersBeforeCache);
     await page.evaluate(() => Hooks.callAll("closeSettingsConfig", window.settingsApp));
     assert.equal(await preview.count(), 0);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.evaluate(() => game.settings.set("quick-toss", "diceScale", 50));
+    const smallRoll = await page.evaluate(() => throwMessage("small", "standard"));
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    await page.evaluate(() => game.settings.set("quick-toss", "diceScale", 150));
+    const largeRoll = await page.evaluate(() => throwMessage("large", "standard"));
+    assert.ok(smallRoll.opaque > 0 && largeRoll.opaque > smallRoll.opaque * 7,
+        "saved scale changes the actual rendered dice");
     assert.deepEqual(errors, []);
 });
