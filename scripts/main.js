@@ -3,6 +3,7 @@ import { canReplaceCoreSound, playClatter, preloadClatter } from "./clatter.js";
 import { getDice } from "./results.js";
 import { registerMlpInteriors } from "./mlp-interiors.js";
 import { registerPonyfinderInteriors } from "./ponyfinder-interiors.js";
+import { closePreview, mountPreview } from "./preview.js";
 
 const ID = "quick-toss";
 const HIDDEN = "quick-toss-pending";
@@ -173,6 +174,17 @@ Hooks.once("ready", () => {
         else setTimeout(() => void rendererPromise(), 0);
     }
 });
+
+Hooks.on("renderSettingsConfig", (app, html) => {
+    if (!enabled) return;
+    mountPreview(app, html, catalog, async (spec, signal) => {
+        if (signal.aborted) return null;
+        const instance = await rendererPromise();
+        return signal.aborted ? null : instance?.preview(spec, signal);
+    });
+});
+
+Hooks.on("closeSettingsConfig", closePreview);
 
 Hooks.on("preCreateChatMessage", (message) => {
     if (!enabled || !message.isRoll) return;

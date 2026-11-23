@@ -82,6 +82,19 @@ export function createCatalog(onChange = noop) {
 
     return {
         api,
+        previewDie(id) {
+            const dice = presets.get(id);
+            const preset = dice?.get("d20") ?? dice?.values().next().value;
+            const type = preset?.type ?? "d20";
+            const faces = Number(/^d(\d+)$/.exec(type)?.[1])
+                || Number(/^d(\d+)$/.exec(preset?.shape)?.[1]) || preset?.labels?.length || 20;
+            const values = Object.keys(preset?.valueMap ?? {}).map(Number).filter(Number.isFinite);
+            const min = Number.isInteger(preset?.values?.min) ? preset.values.min : 1;
+            const max = Number.isInteger(preset?.values?.max) ? preset.values.max : min + faces - 1;
+            const highest = values.length ? Math.max(...values) : max;
+            const value = type === "d100" ? 0 : type === "df" ? 1 : highest;
+            return { type, faces, value };
+        },
         interiorSource(id) {
             const system = systems.get(id);
             const die = presets.get(id)?.get("d20");

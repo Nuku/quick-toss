@@ -111,7 +111,13 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         const timeLocations = new WeakSet();
         const getLocation = context.getUniformLocation;
         const setFloat = context.uniform1f;
+        const readPixels = context.readPixels;
         window.interiorTimes = [];
+        window.previewReads = 0;
+        context.readPixels = function (x, y, width, height, ...args) {
+            if (width === 128 && height === 128) window.previewReads++;
+            return readPixels.call(this, x, y, width, height, ...args);
+        };
         context.getUniformLocation = function (program, name) {
             const location = getLocation.call(this, program, name);
             if (location && name === "uQuickInteriorTime") timeLocations.add(location);
@@ -312,5 +318,46 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await page.emulateMedia({ reducedMotion: "reduce" });
     const reduced = await page.evaluate(() => throwMessage("reduced", "standard"));
     assert.equal(reduced.hidden, false);
+
+    await page.evaluate(() => {
+        window.settingsApp = {};
+        const form = document.createElement("form");
+        form.id = "quick-toss-preview-test";
+        form.hidden = true;
+        for (const key of ["system", "colorset", "texture"]) {
+            const group = document.createElement("div");
+            group.className = "form-group";
+            const select = document.createElement("select");
+            select.name = `quick-toss.${key}`;
+            const { choices } = game.settings.settings.get(select.name);
+            for (const [value, label] of Object.entries(choices)) select.add(new Option(label, value));
+            group.append(select);
+            form.append(group);
+        }
+        form.elements["quick-toss.system"].value = "mlp-dice-rainbow-dash-skinned";
+        document.body.prepend(form);
+        Hooks.callAll("renderSettingsConfig", window.settingsApp, form);
+    });
+    const preview = page.locator(".quick-toss-preview-image");
+    const picker = page.locator('select[name="quick-toss.system"]');
+    assert.equal(await preview.isVisible(), false);
+    assert.ok(!requests.some((url) => url.endsWith("/skins/rainbow-dash/d20.glb")));
+
+    await page.locator("#quick-toss-preview-test").evaluate((form) => { form.hidden = false; });
+    await preview.waitFor({ state: "visible" });
+    const modelStill = await preview.getAttribute("src");
+    assert.match(modelStill, /^data:image\/png;base64,/);
+    assert.ok(requests.some((url) => url.endsWith("/skins/rainbow-dash/d20.glb")));
+    const beforeInterior = await page.evaluate(() => interiorTimes.length);
+    await picker.selectOption("mlp-dice-applejack-living");
+    await preview.waitFor({ state: "visible" });
+    assert.notEqual(await preview.getAttribute("src"), modelStill);
+    assert.deepEqual(await page.evaluate((start) => interiorTimes.slice(start), beforeInterior), [0.55]);
+    const rendersBeforeCache = await page.evaluate(() => previewReads);
+    await picker.selectOption("mlp-dice-rainbow-dash-skinned");
+    assert.equal(await preview.getAttribute("src"), modelStill);
+    assert.equal(await page.evaluate(() => previewReads), rendersBeforeCache);
+    await page.evaluate(() => Hooks.callAll("closeSettingsConfig", window.settingsApp));
+    assert.equal(await preview.count(), 0);
     assert.deepEqual(errors, []);
 });

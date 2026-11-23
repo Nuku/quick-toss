@@ -19,6 +19,8 @@ The [latest GitHub release](https://github.com/Nuku/quick-toss/releases/latest) 
 
 Open **Configure Settings → Module Settings → Quick Toss** and pick a **Dice preset**, **Dice theme**, or **Dice texture**. These choices are saved per player per world. Other players see the roller's selection when they can see the roll.
 
+The settings show one still of the current selection and its palette. Living Inside previews use the landing frame. Each still is generated on demand and cached for the session.
+
 **Animate dice** is a per-device option. Browser reduced-motion preferences disable tosses automatically.
 
 Dice clatter during the toss and follow Foundry's **Interface** volume. Once the chat card appears, the settled dice linger for about two seconds. [Sound credits](assets/SOUND-CREDITS.md)

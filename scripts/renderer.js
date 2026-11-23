@@ -1,5 +1,6 @@
 import {
-    AmbientLight, DirectionalLight, Group, OrthographicCamera, Quaternion, Scene, Vector3, WebGLRenderer,
+    AmbientLight, DirectionalLight, Group, OrthographicCamera, Quaternion, Scene, SRGBColorSpace, Vector3,
+    WebGLRenderer, WebGLRenderTarget,
 } from "three";
 import { planDie } from "./dice.js";
 import { setModelContext } from "./assets.js";
@@ -10,6 +11,16 @@ const HOLD_MS = 1900;
 const ASSET_BUDGET_MS = 125;
 const SPIN = new Quaternion();
 const AXIS = new Vector3(0.75, 0.55, 0.36).normalize();
+const PREVIEW_SIZE = 128;
+
+function litScene() {
+    const scene = new Scene();
+    scene.add(new AmbientLight(0xffffff, 1.6));
+    const key = new DirectionalLight(0xfff4e4, 1.5);
+    key.position.set(-3, 4, 6);
+    scene.add(key);
+    return scene;
+}
 
 export function createRenderer(onTossStart) {
     const canvas = document.createElement("canvas");
@@ -24,13 +35,9 @@ export function createRenderer(onTossStart) {
     layer.append(canvas);
     document.body.append(layer);
 
-    const scene = new Scene();
+    const scene = litScene();
     const camera = new OrthographicCamera(-1, 1, 1, -1, 1, 300);
     camera.position.set(0, 0, 150);
-    scene.add(new AmbientLight(0xffffff, 1.6));
-    const key = new DirectionalLight(0xfff4e4, 1.5);
-    key.position.set(-3, 4, 6);
-    scene.add(key);
     const batches = new Set();
     const slots = new Set();
     let generation = 0;
@@ -215,6 +222,46 @@ export function createRenderer(onTossStart) {
         return completion;
     }
 
+    async function preview(spec, signal) {
+        if (lost || signal.aborted) return null;
+        const plan = planDie(spec);
+        const assets = await Promise.all(plan.assets);
+        if (lost || signal.aborted) return null;
+        const model = plan.build(assets);
+        const previewScene = litScene();
+        const eye = new OrthographicCamera(-1.28, 1.28, 1.28, -1.28, 0.1, 20);
+        eye.position.z = 4;
+        const group = new Group();
+        group.quaternion.copy(model.target);
+        group.add(model.object);
+        previewScene.add(group);
+        model.setInteriorProgress?.(1);
+        const target = new WebGLRenderTarget(PREVIEW_SIZE, PREVIEW_SIZE, { colorSpace: SRGBColorSpace });
+        const previousTarget = webgl.getRenderTarget();
+        try {
+            webgl.setRenderTarget(target);
+            webgl.render(previewScene, eye);
+            const raw = new Uint8Array(PREVIEW_SIZE ** 2 * 4);
+            webgl.readRenderTargetPixels(target, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE, raw);
+            if (!raw.some((channel, index) => index % 4 === 3 && channel > 0)) return null;
+            const output = document.createElement("canvas");
+            output.width = output.height = PREVIEW_SIZE;
+            const ctx = output.getContext("2d");
+            if (!ctx) return null;
+            const pixels = ctx.createImageData(PREVIEW_SIZE, PREVIEW_SIZE);
+            const stride = PREVIEW_SIZE * 4;
+            for (let row = 0; row < PREVIEW_SIZE; row++) {
+                pixels.data.set(raw.subarray(row * stride, (row + 1) * stride), (PREVIEW_SIZE - row - 1) * stride);
+            }
+            ctx.putImageData(pixels, 0, 0);
+            return output.toDataURL();
+        } finally {
+            webgl.setRenderTarget(previousTarget);
+            target.dispose();
+            model.dispose();
+        }
+    }
+
     canvas.addEventListener("webglcontextlost", (event) => {
         event.preventDefault();
         lost = true;
@@ -222,5 +269,5 @@ export function createRenderer(onTossStart) {
     });
     canvas.addEventListener("webglcontextrestored", () => { lost = false; });
     window.addEventListener("resize", () => { if (batches.size) schedule(); });
-    return { toss, clear };
+    return { toss, clear, preview };
 }

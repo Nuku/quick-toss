@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- Added still dice previews and color swatches to Quick Toss appearance settings.
+
 ## 0.1.5
 
 - Added Living Inside presets from Pony Pantheon, From the Ashes, and Best of the Best.
