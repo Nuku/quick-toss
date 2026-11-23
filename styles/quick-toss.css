@@ -45,16 +45,15 @@
 .quick-toss-preview-stage {
     display: grid;
     place-items: center;
-    width: 108px;
-    height: 108px;
-    flex: 0 0 108px;
+    width: var(--quick-toss-preview-stage);
+    height: var(--quick-toss-preview-stage);
+    flex: 0 0 var(--quick-toss-preview-stage);
 }
 
 .quick-toss-preview-fallback,
 .quick-toss-preview-image {
-    width: 72px;
-    height: 72px;
-    transform: scale(var(--quick-toss-preview-scale, 1));
+    width: var(--quick-toss-preview-size);
+    height: var(--quick-toss-preview-size);
 }
 
 .quick-toss-preview-fallback {
@@ -65,8 +64,8 @@
 }
 
 .quick-toss-preview-fallback img {
-    width: 52px;
-    height: 52px;
+    width: 72%;
+    height: 72%;
     object-fit: contain;
 }
 

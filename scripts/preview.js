@@ -1,6 +1,6 @@
 import { getFace, getResultFace } from "./catalog.js";
 import { image as loadImage, isImageLabel } from "./assets.js";
-import { diceScaleFactor } from "./scale.js";
+import { diceLayout, diceScaleFactor, DICE_SCALE_RANGE, PREVIEW_HALF_SPAN } from "./scale.js";
 
 const cache = new Map();
 const mounted = new WeakMap();
@@ -45,11 +45,16 @@ export function mountPreview(app, html, catalog, render) {
     group.append(panel);
 
     function resizePreview() {
-        stage.style.setProperty("--quick-toss-preview-scale", diceScaleFactor(sizePicker?.valueAsNumber));
+        // A still spans the preview camera's full world width, including its transparent margins.
+        const pixels = (percent) => diceLayout(window.innerWidth, window.innerHeight, diceScaleFactor(percent)).size
+            * PREVIEW_HALF_SPAN * 2;
+        stage.style.setProperty("--quick-toss-preview-size", `${pixels(sizePicker?.valueAsNumber)}px`);
+        stage.style.setProperty("--quick-toss-preview-stage", `${pixels(DICE_SCALE_RANGE.max)}px`);
     }
     resizePreview();
     sizePicker?.addEventListener("input", resizePreview);
     sizePicker?.addEventListener("change", resizePreview);
+    window.addEventListener("resize", resizePreview);
 
     let visible = false;
     let timer;
@@ -130,6 +135,7 @@ export function mountPreview(app, html, catalog, render) {
             observer.disconnect();
             sizePicker?.removeEventListener("input", resizePreview);
             sizePicker?.removeEventListener("change", resizePreview);
+            window.removeEventListener("resize", resizePreview);
             for (const select of selects) select?.removeEventListener("change", update);
             panel.remove();
         },

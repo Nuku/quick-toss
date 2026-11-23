@@ -21,7 +21,7 @@ Open **Configure Settings → Module Settings → Quick Toss** and pick a **Dice
 
 The settings show one still of the current selection and its palette. Living Inside previews use the landing frame. Each still is generated on demand and cached for the session.
 
-Use **Dice size (%)** to set the size of dice on your screen from 50% to 150%. The preview resizes as you move the slider. Large rolls may use smaller dice to fit your screen.
+Use **Dice size (%)** to set the size of dice on your screen from 50% to 150%. The preview matches the size of a single settled die on your screen and updates as you move the slider. Large rolls may use smaller dice to fit.
 
 **Animate dice** is a per-device option. Browser reduced-motion preferences disable tosses automatically.
 

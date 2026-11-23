@@ -4,7 +4,7 @@ import {
 } from "three";
 import { planDie } from "./dice.js";
 import { setModelContext } from "./assets.js";
-import { diceScaleFactor } from "./scale.js";
+import { diceLayout, diceScaleFactor, PREVIEW_HALF_SPAN } from "./scale.js";
 
 const MAX_ON_SCREEN = 24;
 const TOSS_MS = 720;
@@ -116,12 +116,7 @@ export function createRenderer(onTossStart, initialScale) {
             return;
         }
         resize();
-        const baseColumns = width < 580 ? 4 : 6;
-        const baseSize = Math.max(18, Math.min(43, width / (baseColumns * 3.1), height / 14)) * 1.25;
-        const desiredSize = baseSize * scale;
-        const columns = Math.max(1, Math.min(baseColumns, Math.floor(width * 0.92 / (desiredSize * 2.2))));
-        const lastRow = Math.floor(Math.max(...slots) / columns);
-        const size = Math.min(desiredSize, width * 0.92 / 2.2, height / ((lastRow + 1) * 2.2));
+        const { columns, lastRow, size } = diceLayout(width, height, scale, Math.max(...slots));
         const spacing = size * 2.2;
         const gridTop = Math.min(height / 2 - size, Math.max(height * 0.11, lastRow * spacing + size - height / 2));
         let moving = false;
@@ -234,7 +229,8 @@ export function createRenderer(onTossStart, initialScale) {
         if (lost || signal.aborted) return null;
         const model = plan.build(assets);
         const previewScene = litScene();
-        const eye = new OrthographicCamera(-1.28, 1.28, 1.28, -1.28, 0.1, 20);
+        const span = PREVIEW_HALF_SPAN;
+        const eye = new OrthographicCamera(-span, span, span, -span, 0.1, 20);
         eye.position.z = 4;
         const group = new Group();
         group.quaternion.copy(model.target);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.8
+
+- Matched the settings preview to the on-screen size of a settled die.
+
 ## 0.1.7
 
 - Added a per-player dice size slider with a live preview of the selected die.

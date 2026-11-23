@@ -219,13 +219,19 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             gl?.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
             let opaque = 0;
             let red = 0;
+            let minX = Infinity;
+            let maxX = -1;
             for (let i = 3; i < pixels.length; i += 4) {
                 if (pixels[i]) {
                     opaque += 1;
                     red += pixels[i - 3];
+                    const x = ((i - 3) / 4) % canvas.width;
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
                 }
             }
             return { hidden, shown, revealed, revealMs, opaque, red: Math.round(red / opaque),
+                dieWidth: opaque ? (maxX - minX + 1) * canvas.clientWidth / canvas.width : 0,
                 peak, fallbacks: fallbackHits - previousFallbacks, coreSound: message.sound };
         };
         window.firstDiePixels = () => {
@@ -372,7 +378,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             input.value = String(percent);
             input.dispatchEvent(new Event("input", { bubbles: true }));
         }, value);
-        assert.equal((await preview.boundingBox()).width, normalWidth * multiplier);
+        assert.ok(Math.abs((await preview.boundingBox()).width - normalWidth * multiplier) < 0.05);
         assert.equal(await preview.getAttribute("src"), modelStill);
     }
     assert.equal(await page.evaluate(() => previewReads), previewBeforeResize);
@@ -385,15 +391,38 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await picker.selectOption("mlp-dice-rainbow-dash-skinned");
     assert.equal(await preview.getAttribute("src"), modelStill);
     assert.equal(await page.evaluate(() => previewReads), rendersBeforeCache);
+    await picker.selectOption("standard");
+    await preview.waitFor({ state: "visible" });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    for (const percent of [50, 150]) {
+        await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+        await scalePicker.evaluate((input, value) => {
+            input.value = String(value);
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            game.settings.set("quick-toss", "diceScale", value);
+        }, percent);
+        const previewWidth = await preview.evaluate(async (img) => {
+            await img.decode();
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = img.naturalWidth;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            let minX = Infinity;
+            let maxX = -1;
+            for (let index = 3; index < data.length; index += 4) {
+                if (!data[index]) continue;
+                const x = ((index - 3) / 4) % canvas.width;
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+            }
+            return (maxX - minX + 1) * img.getBoundingClientRect().width / canvas.width;
+        });
+        const roll = await page.evaluate((value) => throwMessage(`scale-${value}`, "standard"), percent);
+        assert.ok(Math.abs(roll.dieWidth - previewWidth) < 3,
+            `at ${percent}% the preview is ${previewWidth}px and the settled die is ${roll.dieWidth}px`);
+    }
     await page.evaluate(() => Hooks.callAll("closeSettingsConfig", window.settingsApp));
     assert.equal(await preview.count(), 0);
-    await page.emulateMedia({ reducedMotion: "no-preference" });
-    await page.evaluate(() => game.settings.set("quick-toss", "diceScale", 50));
-    const smallRoll = await page.evaluate(() => throwMessage("small", "standard"));
-    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
-    await page.evaluate(() => game.settings.set("quick-toss", "diceScale", 150));
-    const largeRoll = await page.evaluate(() => throwMessage("large", "standard"));
-    assert.ok(smallRoll.opaque > 0 && largeRoll.opaque > smallRoll.opaque * 7,
-        "saved scale changes the actual rendered dice");
     assert.deepEqual(errors, []);
 });
