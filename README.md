@@ -35,7 +35,7 @@ Quick Toss fires `diceSoNiceInit` and `diceSoNiceReady` with a lightweight regis
 
 Model art uses static lighting and simplified materials. Add-on shader callbacks, animation clips, physical collisions, and special effects are outside the renderer. Quick Toss preloads your selected skin's preview die and can apply a skin that finishes loading during a toss. If the asset is still unavailable at landing, the die keeps its numbered fallback for that roll. Very large throws show up to 16 dice and an omitted-dice count. Foundry's card still shows the full result.
 
-Quick Toss uses Foundry's normal chat visibility. It animates new cards and rolls appended to a previously seen card. It exposes `game.dice3d.waitFor3DAnimationByMessageID(id)` and emits `diceSoNiceRollComplete` for gated cards. Its `showForRoll` API renders on the calling client.
+Quick Toss uses Foundry's normal chat visibility. It animates new cards and rolls appended to a previously seen card. Revealing a roll keeps chat pinned to the latest messages when you're already near the bottom and preserves your position when you're reading older messages. It exposes `game.dice3d.waitFor3DAnimationByMessageID(id)` and emits `diceSoNiceRollComplete` for gated cards. Its `showForRoll` API renders on the calling client.
 
 PF2e Toolbelt and other callers can use `game.dice3d.animateRoll` for animations without a chat message. Quick Toss applies the requested chat visibility and uses Foundry's targeted user queries to reach eligible clients when the caller has permission.
 

@@ -38,7 +38,11 @@ async function serve(request, response) {
         response.end(`<!doctype html>
             <script type="importmap">{"imports":{"@client/":"/foundry/client/"}}</script>
             <link rel="stylesheet" href="/styles/quick-toss.css">
-            <button>Unlock audio</button><ol class="chat-log"></ol>`);
+            <style>
+                .chat-scroll { height: 120px; overflow-y: auto; }
+                .chat-log > li { min-height: 100px; }
+            </style>
+            <button>Unlock audio</button><div class="chat-scroll"><ol class="chat-log"></ol></div>`);
         return;
     }
     if (foundryRoot && path === "/foundry/client/canvas/placeables/tile.mjs") {
@@ -256,11 +260,18 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         await page.getByRole("button", { name: "Unlock audio" }).click();
         await page.waitForFunction(() => game.audio.interface?.state === "running");
     }
+    const chat = page.locator(".chat-scroll");
+    await chat.evaluate((scroll) => {
+        card(makeMessage("older"));
+        scroll.scrollTop = scroll.scrollHeight;
+    });
     const standard = await page.evaluate(() => throwMessage("plain", "standard"));
     releaseRecording();
     assert.equal(standard.hidden && standard.shown && standard.revealed, true);
     assert.ok(standard.opaque > 500, "default dice produce visible WebGL pixels");
     assert.ok(standard.revealMs >= 650 && standard.revealMs < 1700, "chat reveals at landing");
+    assert.equal(await chat.evaluate((scroll) => scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight),
+        0, "the revealed roll keeps chat at the bottom");
     if (foundryRoot) {
         assert.equal(standard.fallbacks, 1, "the first toss uses Foundry's stock sound while the recording loads");
         assert.ok(standard.peak > 0.01, "the stock sound emits audio on Foundry's interface channel");
@@ -272,7 +283,9 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden, null, { timeout: 4000 });
 
     if (foundryRoot) await page.evaluate(() => { game.audio.globalMute = true; });
+    await chat.evaluate((scroll) => { scroll.scrollTop = 0; });
     const fallback = await page.evaluate(() => throwMessage("fallback", "fallback"));
+    assert.equal(await chat.evaluate((scroll) => scroll.scrollTop), 0, "revealing a roll preserves scrollback");
     assert.equal(fallback.peak, 0, "global mute suppresses clatter");
     assert.equal(fallback.fallbacks, 0, "global mute suppresses stock audio too");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);

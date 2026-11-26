@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.11
+
+- Fixed chat auto-scroll when Quick Toss reveals a roll in Foundry v14.
+
 ## 0.1.10
 
 - Preloaded selected dice skins and applied late-loading skins during the same toss.

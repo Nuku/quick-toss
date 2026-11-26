@@ -96,11 +96,11 @@ function reveal(entry, shown) {
         if (html.classList.contains(HIDDEN)) entry.elements.add(html);
     }
     for (const html of entry.elements) {
-        const log = html.closest("#chat-log, .chat-log");
-        if (log && log.scrollHeight - log.scrollTop - log.clientHeight < 60) scrollTargets.add(log);
+        const scroll = html.closest(".chat-scroll");
+        if (scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60) scrollTargets.add(scroll);
         html.classList.remove(HIDDEN);
     }
-    for (const log of scrollTargets) log.scrollTop = log.scrollHeight;
+    for (const scroll of scrollTargets) scroll.scrollTop = scroll.scrollHeight;
     entry.resolve(shown);
     Hooks.callAll("diceSoNiceRollComplete", entry.id);
 }
