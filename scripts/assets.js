@@ -56,7 +56,7 @@ export async function prepareFaces({ preset, texture }, labels) {
         Promise.all(labels.map(({ index }) => source(preset?.backgrounds?.labels?.[index - 1], presetAtlas))),
         Promise.all(labels.map(({ text }) => source(text, presetAtlas, true))),
     ]);
-    return { pattern, backgrounds, artwork };
+    return pattern || backgrounds.some(Boolean) || artwork.some(Boolean) ? { pattern, backgrounds, artwork } : null;
 }
 
 export function isImageLabel(value) {

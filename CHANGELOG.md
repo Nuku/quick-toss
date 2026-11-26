@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10
+
+- Preloaded selected dice skins and applied late-loading skins during the same toss.
+
 ## 0.1.9
 
 - Fixed PF2e Toolbelt save rolls by supporting the Dice So Nice `animateRoll` API.

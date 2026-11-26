@@ -277,9 +277,17 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     assert.equal(fallback.fallbacks, 0, "global mute suppresses stock audio too");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
     if (foundryRoot) await page.evaluate(() => { game.audio.globalMute = false; });
-    await page.evaluate(() => throwMessage("warm", "mlp-dice-applejack-skinned"));
-    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
-    const skinned = await page.evaluate(() => throwMessage("skin", "mlp-dice-applejack-skinned"));
+    let releaseSkin;
+    const skinGate = new Promise((resolve) => { releaseSkin = resolve; });
+    context.after(releaseSkin);
+    await page.route("**/skins/applejack/d20.glb", async (route) => {
+        await skinGate;
+        await route.continue();
+    });
+    const firstSkinnedRoll = page.evaluate(() => throwMessage("skin", "mlp-dice-applejack-skinned"));
+    await page.locator("#quick-toss-layer").waitFor({ state: "visible" });
+    releaseSkin();
+    const skinned = await firstSkinnedRoll;
     assert.equal(skinned.hidden && skinned.shown && skinned.revealed, true);
     assert.ok(skinned.opaque > 500);
     if (foundryRoot) assert.ok(skinned.peak > 0.01, "the recording emits audio on Foundry's interface channel");
@@ -288,6 +296,10 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         "the add-on model renders differently from a procedural die with the same colors");
     assert.ok(requests.some((url) => url.endsWith("/skins/applejack/d20.glb")));
 
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    const cachedSkin = await page.evaluate(() => throwMessage("cached-skin", "mlp-dice-applejack-skinned"));
+    assert.deepEqual([skinned.opaque, skinned.red], [cachedSkin.opaque, cachedSkin.red],
+        "the first toss lands with the same skin as the cached toss");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
     await page.waitForFunction(() => game.settings.settings.get("quick-toss.system").choices["mlp-dice-applejack-living"]);
     const living = await page.evaluate(() => throwMessage("living", "mlp-dice-applejack-living"));

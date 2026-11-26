@@ -32,6 +32,7 @@ function refreshSettings() {
             if (saved && !Object.hasOwn(choices[key], saved)) choices[key][saved] = `${saved} (unavailable)`;
             config.choices = choices[key];
         }
+        preloadAppearance();
     });
 }
 
@@ -54,6 +55,25 @@ function rendererPromise() {
             return null;
         });
     return driver;
+}
+
+function preloadAppearance() {
+    if (!canAnimate()) return;
+    const look = appearance();
+    const die = catalog.previewDie(look.system);
+    const spec = catalog.resolve(die, look);
+    if (!spec.preset && !spec.texture) return;
+    const prepare = async () => {
+        if (!canAnimate() || preferences.some((key) => setting(key) !== look[key])) return;
+        try {
+            const instance = await rendererPromise();
+            await instance?.preload({ ...die, ...spec });
+        } catch (error) {
+            console.debug("Quick Toss | Could not preload dice skin", error);
+        }
+    };
+    if (globalThis.requestIdleCallback) requestIdleCallback(prepare, { timeout: 2000 });
+    else setTimeout(prepare, 0);
 }
 
 function hide(entry, html) {
@@ -185,6 +205,7 @@ Hooks.once("init", () => {
             else if (canAnimate()) {
                 void preloadClatter();
                 void rendererPromise();
+                preloadAppearance();
             }
         },
     });
@@ -196,6 +217,7 @@ Hooks.once("init", () => {
     for (const [key, [name, hint, defaultValue]] of Object.entries(entries)) {
         game.settings.register(ID, key, {
             name, hint, scope: "user", config: true, type: String, default: defaultValue, choices: {},
+            onChange: preloadAppearance,
         });
     }
     game.settings.register(ID, "diceScale", {

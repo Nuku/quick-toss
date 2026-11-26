@@ -131,6 +131,20 @@ export function createRenderer(onTossStart, initialScale) {
                 const t = Math.max(0, Math.min(1, (now - batch.start - die.delay) / TOSS_MS));
                 if (t < 1) moving = true;
                 if (!die.landed) {
+                    if (die.revision !== die.assets.revision) {
+                        die.revision = die.assets.revision;
+                        try {
+                            const model = die.plan.build(die.assets.values);
+                            die.group.remove(die.model.object);
+                            die.model.dispose();
+                            die.badge?.remove();
+                            die.model = model;
+                            die.badge = model.badge == null ? null : mark(model.badge);
+                            die.group.add(model.object);
+                        } catch (error) {
+                            console.debug("Quick Toss | Could not apply a late dice skin", error);
+                        }
+                    }
                     die.model.setInteriorProgress?.(t);
                     die.landed = t === 1;
                 }
@@ -179,10 +193,14 @@ export function createRenderer(onTossStart, initialScale) {
         const requested = specs.slice(0, MAX_ON_SCREEN);
         const plans = requested.map(planDie);
         let budget;
-        const assets = plans.map(() => []);
+        const assets = plans.map(() => ({ values: [], revision: 0 }));
         await Promise.race([
             Promise.all(plans.flatMap((plan, index) => plan.assets.map((asset, slot) =>
-                asset.then((data) => { assets[index][slot] = data; })))),
+                asset.then((data) => {
+                    if (!data) return;
+                    assets[index].values[slot] = data;
+                    assets[index].revision += 1;
+                })))),
             new Promise((resolve) => { budget = setTimeout(resolve, ASSET_BUDGET_MS); }),
         ]).finally(() => clearTimeout(budget));
         if (requestGeneration !== generation || lost || document.hidden) return false;
@@ -198,13 +216,16 @@ export function createRenderer(onTossStart, initialScale) {
         try {
             const side = Math.random() < 0.5 ? -1 : 1;
             for (let index = 0; index < count; index++) {
-                const model = plans[index].build(assets[index]);
+                const plan = plans[index];
+                const dieAssets = assets[index];
+                const model = plan.build(dieAssets.values);
                 const dieGroup = new Group();
                 dieGroup.add(model.object);
                 group.add(dieGroup);
                 const delay = Math.min(index * 14, 120);
                 dice.push({
-                    model, group: dieGroup, side, delay, phase: Math.random() * 2,
+                    model, plan, assets: dieAssets, revision: dieAssets.revision,
+                    group: dieGroup, side, delay, phase: Math.random() * 2,
                     slot: freeSlot(), badge: model.badge === null || model.badge === undefined ? null : mark(model.badge),
                 });
                 batch.delay = delay;
@@ -275,5 +296,6 @@ export function createRenderer(onTossStart, initialScale) {
         if (batches.size) schedule();
     }
 
-    return { toss, clear, preview, setScale };
+    const preload = (spec) => Promise.allSettled(planDie(spec).assets);
+    return { toss, clear, preview, setScale, preload };
 }
