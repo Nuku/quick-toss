@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.9
+
+- Fixed PF2e Toolbelt save rolls by supporting the Dice So Nice `animateRoll` API.
+
 ## 0.1.8
 
 - Matched the settings preview to the on-screen size of a settled die.

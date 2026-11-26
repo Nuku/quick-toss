@@ -37,6 +37,8 @@ Model art uses static lighting and simplified materials. Add-on shader callbacks
 
 Quick Toss uses Foundry's normal chat visibility. It animates new cards and rolls appended to a previously seen card. It exposes `game.dice3d.waitFor3DAnimationByMessageID(id)` and emits `diceSoNiceRollComplete` for gated cards. Its `showForRoll` API renders on the calling client.
 
+PF2e Toolbelt and other callers can use `game.dice3d.animateRoll` for animations without a chat message. Quick Toss applies the requested chat visibility and uses Foundry's targeted user queries to reach eligible clients when the caller has permission.
+
 ## Development
 
 ### Registering a Living Inside preset

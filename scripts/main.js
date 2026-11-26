@@ -1,12 +1,14 @@
 import { createCatalog } from "./catalog.js";
 import { canReplaceCoreSound, playClatter, preloadClatter } from "./clatter.js";
-import { getDice } from "./results.js";
+import { getDice, MAX_ROLL_DICE } from "./results.js";
 import { registerMlpInteriors } from "./mlp-interiors.js";
 import { registerPonyfinderInteriors } from "./ponyfinder-interiors.js";
 import { closePreview, mountPreview } from "./preview.js";
 import { DEFAULT_DICE_SCALE, DICE_SCALE_RANGE } from "./scale.js";
 
 const ID = "quick-toss";
+const ROLL_QUERY = `${ID}.animateRoll`;
+const LEGACY_MODES = { roll: "public", publicroll: "public", gmroll: "gm", blindroll: "blind", selfroll: "self" };
 const HIDDEN = "quick-toss-pending";
 const preferences = ["system", "colorset", "texture"];
 const pending = new Map();
@@ -114,6 +116,18 @@ function startChatToss(message, rolls) {
         });
 }
 
+async function animateDirect({ dice, count, author, look }) {
+    if (!canAnimate() || !Array.isArray(dice) || !dice.length || dice.length > MAX_ROLL_DICE
+        || !Number.isInteger(count) || count < 1
+        || !dice.every((die) => typeof die?.type === "string" && Number.isInteger(die.value))) return false;
+    try {
+        return await toss(dice, count, look ?? (author === game.user.id ? appearance() : {}));
+    } catch (error) {
+        console.warn("Quick Toss | Could not animate a direct roll", error);
+        return false;
+    }
+}
+
 const api = Object.assign(catalog.api, {
     messageHookDisabled: false,
     isEnabled: canAnimate,
@@ -129,9 +143,39 @@ const api = Object.assign(catalog.api, {
         const { dice, count } = getDice([roll]);
         return dice.length ? toss(dice, count, user?.id === game.user.id ? appearance() : {}) : false;
     },
+    async animateRoll(roll, messageData = {}, { messageMode } = {}) {
+        const { dice, count } = getDice([roll]);
+        if (!dice.length) return false;
+
+        const source = messageData?.toObject?.() ?? messageData ?? {};
+        const author = source.author?.id ?? source.author ?? game.user.id;
+        const visibility = {
+            speaker: source.speaker,
+            whisper: source.whisper?.map((user) => user?.id ?? user) ?? [],
+            blind: Boolean(source.blind),
+        };
+        if (messageMode || (source.whisper === undefined && source.blind === undefined)) {
+            ChatMessage.applyMode(visibility, LEGACY_MODES[messageMode] ?? messageMode);
+        }
+        const canSee = (user) => {
+            if (user.id === author) return !visibility.blind || user.isGM;
+            if (visibility.whisper.length) return visibility.whisper.includes(user.id);
+            return !visibility.blind || user.isGM;
+        };
+        const data = { dice, count, author, look: author === game.user.id ? appearance() : undefined };
+
+        // Send only to eligible users. Module socket broadcasts also reach users who cannot see private rolls.
+        if (game.user.hasPermission("QUERY_USER")) {
+            const recipients = game.users.filter((user) => user.active && user.id !== game.user.id && canSee(user));
+            if (recipients.length) void game.user.constructor.queryMany(recipients, ROLL_QUERY, data, { timeout: 2500 })
+                .catch((error) => console.debug("Quick Toss | Could not send direct roll", error));
+        }
+        return canSee(game.user) ? animateDirect(data) : false;
+    },
 });
 
 Hooks.once("init", () => {
+    CONFIG.queries[ROLL_QUERY] = animateDirect;
     game.settings.register(ID, "animation", {
         name: "Animate dice",
         hint: "Show dice tosses on this device. Reduced-motion preferences also apply.",

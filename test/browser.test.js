@@ -129,6 +129,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         };
         let fallbackHits = 0;
         let analyser;
+        window.CONFIG = { debug: {}, queries: {} };
         window.game = {
             i18n: { localize: (key) => key }, user: { id: "player" },
             modules: new Map([["quick-toss", {}], ["mlp-dice", { active: true }]]),
@@ -144,7 +145,6 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             },
         };
         if (nativeAudio) {
-            window.CONFIG = { debug: {} };
             window.ui = {};
             window.canvas = { ready: false };
             Math.clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -424,5 +424,39 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     }
     await page.evaluate(() => Hooks.callAll("closeSettingsConfig", window.settingsApp));
     assert.equal(await preview.count(), 0);
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    const direct = await page.evaluate(async () => {
+        const sent = [];
+        game.user.active = true;
+        game.user.hasPermission = (permission) => permission === "QUERY_USER";
+        game.user.constructor = {
+            async queryMany(users, name, data) {
+                sent.push({ recipients: users.map((user) => user.id), name, value: data.dice[0].value });
+            },
+        };
+        game.users = [game.user, { id: "viewer", active: true }, { id: "gm", isGM: true, active: true },
+            { id: "offline" }];
+        window.ChatMessage = {
+            applyMode(data, mode) {
+                data.blind = mode === "blind";
+                data.whisper = data.blind ? ["gm"] : [];
+            },
+        };
+        const roll = { dice: [{ faces: 20, denomination: "d20", results: [{ result: 17 }] }] };
+        const data = { author: game.user, speaker: { actor: "test" } };
+        const blind = await game.dice3d.animateRoll(roll, data, { messageMode: "blind" });
+        const hidden = document.querySelector("#quick-toss-layer").hidden;
+        const start = performance.now();
+        const publicRoll = await game.dice3d.animateRoll(roll, data, { messageMode: "public" });
+        return { blind, hidden, publicRoll, elapsed: performance.now() - start, sent };
+    });
+    assert.equal(direct.blind, false);
+    assert.equal(direct.hidden, true);
+    assert.equal(direct.publicRoll, true);
+    assert.ok(direct.elapsed >= 650, "direct roll promises wait for landing");
+    assert.deepEqual(direct.sent, [
+        { recipients: ["gm"], name: "quick-toss.animateRoll", value: 17 },
+        { recipients: ["viewer", "gm"], name: "quick-toss.animateRoll", value: 17 },
+    ]);
     assert.deepEqual(errors, []);
 });
