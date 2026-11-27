@@ -5,6 +5,7 @@ import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 import test from "node:test";
+import { diceLayout } from "../scripts/scale.js";
 
 const browserPath = process.env.QUICK_TOSS_BROWSER;
 const foundryPath = process.env.QUICK_TOSS_FOUNDRY_APP;
@@ -119,7 +120,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         window.interiorTimes = [];
         window.previewReads = 0;
         context.readPixels = function (x, y, width, height, ...args) {
-            if (width === 128 && height === 128) window.previewReads++;
+            if (this.getParameter(this.READ_FRAMEBUFFER_BINDING)) window.previewReads++;
             return readPixels.call(this, x, y, width, height, ...args);
         };
         context.getUniformLocation = function (program, name) {
@@ -183,9 +184,9 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
         game.dice3d.addSystem({ id: "fallback", name: "Fallback comparison" });
         game.dice3d.addDicePreset({ type: "d20", system: "fallback", colorset: "mlp-dice-applejack-skinned" });
         await null;
-        window.makeMessage = (id, visible = true) => ({
+        window.makeMessage = (id, visible = true, faces = 20) => ({
             id, isRoll: true, isContentVisible: visible, flags: {},
-            rolls: [{ dice: [{ faces: 20, denomination: "d20", results: [{ result: 20 }] }] }],
+            rolls: [{ dice: [{ faces, denomination: `d${faces}`, results: [{ result: faces }] }] }],
             updateSource(update) { this.flags["quick-toss"] = { appearance: update["flags.quick-toss.appearance"] }; },
             getFlag(scope, key) { return this.flags[scope]?.[key]; },
         });
@@ -197,9 +198,9 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             document.querySelector(".chat-log").append(html);
             return html;
         };
-        window.throwMessage = async (id, system, visible = true, sound = undefined) => {
+        window.throwMessage = async (id, system, visible = true, sound = undefined, faces = 20) => {
             game.settings.set("quick-toss", "system", system);
-            const message = makeMessage(id, visible);
+            const message = makeMessage(id, visible, faces);
             message.sound = sound;
             Hooks.callAll("preCreateChatMessage", message);
             const started = performance.now();
@@ -225,17 +226,25 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             let red = 0;
             let minX = Infinity;
             let maxX = -1;
+            let minY = Infinity;
+            let maxY = -1;
             for (let i = 3; i < pixels.length; i += 4) {
                 if (pixels[i]) {
                     opaque += 1;
                     red += pixels[i - 3];
-                    const x = ((i - 3) / 4) % canvas.width;
+                    const pixel = (i - 3) / 4;
+                    const x = pixel % canvas.width;
+                    const y = Math.floor(pixel / canvas.width);
                     minX = Math.min(minX, x);
                     maxX = Math.max(maxX, x);
+                    minY = Math.min(minY, y);
+                    maxY = Math.max(maxY, y);
                 }
             }
+            const dieWidth = opaque ? (maxX - minX + 1) * canvas.clientWidth / canvas.width : 0;
+            const dieHeight = opaque ? (maxY - minY + 1) * canvas.clientHeight / canvas.height : 0;
             return { hidden, shown, revealed, revealMs, opaque, red: Math.round(red / opaque),
-                dieWidth: opaque ? (maxX - minX + 1) * canvas.clientWidth / canvas.width : 0,
+                dieWidth, dieSpan: Math.max(dieWidth, dieHeight),
                 peak, fallbacks: fallbackHits - previousFallbacks, coreSound: message.sound };
         };
         window.firstDiePixels = () => {
@@ -269,6 +278,8 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     releaseRecording();
     assert.equal(standard.hidden && standard.shown && standard.revealed, true);
     assert.ok(standard.opaque > 500, "default dice produce visible WebGL pixels");
+    const slotSpan = 2 * diceLayout(900, 600, 1).size;
+    assert.ok(Math.abs(standard.dieSpan - slotSpan) < 2, "the procedural d20 fills its slot");
     assert.ok(standard.revealMs >= 650 && standard.revealMs < 1700, "chat reveals at landing");
     assert.equal(await chat.evaluate((scroll) => scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight),
         0, "the revealed roll keeps chat at the bottom");
@@ -303,6 +314,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     const skinned = await firstSkinnedRoll;
     assert.equal(skinned.hidden && skinned.shown && skinned.revealed, true);
     assert.ok(skinned.opaque > 500);
+    assert.ok(Math.abs(skinned.dieSpan - slotSpan) < 2, "the imported d20 fills the same slot");
     if (foundryRoot) assert.ok(skinned.peak > 0.01, "the recording emits audio on Foundry's interface channel");
     assert.equal(skinned.fallbacks, 0, "loaded clatter replaces stock dice audio");
     assert.notDeepEqual([skinned.opaque, skinned.red], [fallback.opaque, fallback.red],
@@ -421,6 +433,7 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
     await page.emulateMedia({ reducedMotion: "no-preference" });
     for (const percent of [50, 150]) {
         await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+        if (percent === 150) await page.setViewportSize({ width: 1920, height: 1080 });
         await scalePicker.evaluate((input, value) => {
             input.value = String(value);
             input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -443,12 +456,22 @@ test("rolls real MLP dice, gates Foundry-style chat, and preserves blind roll pr
             }
             return (maxX - minX + 1) * img.getBoundingClientRect().width / canvas.width;
         });
+        assert.equal(await preview.evaluate((img) => img.naturalWidth >= img.clientWidth), true,
+            "the settings preview has enough pixels at the selected size");
         const roll = await page.evaluate((value) => throwMessage(`scale-${value}`, "standard"), percent);
         assert.ok(Math.abs(roll.dieWidth - previewWidth) < 3,
             `at ${percent}% the preview is ${previewWidth}px and the settled die is ${roll.dieWidth}px`);
+        if (percent === 150) {
+            assert.deepEqual(await page.locator("#quick-toss-layer canvas").evaluate((canvas) =>
+                [canvas.width, canvas.height]), [1920, 1080], "the landed frame uses full viewport resolution");
+        }
     }
     await page.evaluate(() => Hooks.callAll("closeSettingsConfig", window.settingsApp));
     assert.equal(await preview.count(), 0);
+    await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
+    const cube = await page.evaluate(() => throwMessage("max-d6", "standard", true, undefined, 6));
+    assert.ok(Math.abs(cube.dieSpan - 2 * diceLayout(1920, 1080, 1.5).size) < 2,
+        "a d6 fills its slot at the maximum setting");
     await page.waitForFunction(() => document.querySelector("#quick-toss-layer").hidden);
     const direct = await page.evaluate(async () => {
         const sent = [];

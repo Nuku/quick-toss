@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.12
+
+- Improved sharpness during dice tosses, on the landed frame, and in the settings preview.
+- Scaled standard and imported dice to fill their allotted space when they land while preserving their proportions.
+
 ## 0.1.11
 
 - Fixed chat auto-scroll when Quick Toss reveals a roll in Foundry v14.

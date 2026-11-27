@@ -12,7 +12,9 @@ const HOLD_MS = 1900;
 const ASSET_BUDGET_MS = 125;
 const SPIN = new Quaternion();
 const AXIS = new Vector3(0.75, 0.55, 0.36).normalize();
-const PREVIEW_SIZE = 128;
+const PREVIEW_SIZE = 512;
+const MOTION_BUFFER = { width: 1600, height: 1000 };
+const SETTLED_BUFFER = { width: 3840, height: 2160 };
 
 function litScene() {
     const scene = new Scene();
@@ -37,14 +39,17 @@ export function createRenderer(onTossStart, initialScale) {
     document.body.append(layer);
 
     const scene = litScene();
-    const camera = new OrthographicCamera(-1, 1, 1, -1, 1, 300);
-    camera.position.set(0, 0, 150);
+    const camera = new OrthographicCamera(-1, 1, 1, -1, 1, 600);
+    camera.position.set(0, 0, 300);
     const batches = new Set();
     const slots = new Set();
     let generation = 0;
     let frame = 0;
     let width;
     let height;
+    let bufferWidth;
+    let bufferHeight;
+    let bufferRatio;
     let lost = false;
     let scale = diceScaleFactor(initialScale);
 
@@ -52,10 +57,19 @@ export function createRenderer(onTossStart, initialScale) {
         if (width === innerWidth && height === innerHeight) return;
         width = innerWidth;
         height = innerHeight;
-        webgl.setPixelRatio(Math.min(1, 1280 / width, 800 / height));
-        webgl.setSize(width, height, false);
         Object.assign(camera, { left: -width / 2, right: width / 2, top: height / 2, bottom: -height / 2 });
         camera.updateProjectionMatrix();
+    }
+
+    function resizeBuffer(moving) {
+        // The settled image is rendered once and held, so it can use more pixels than the toss.
+        const limit = moving ? MOTION_BUFFER : SETTLED_BUFFER;
+        const ratio = Math.min(devicePixelRatio, limit.width / width, limit.height / height);
+        if (width === bufferWidth && height === bufferHeight && ratio === bufferRatio) return;
+        webgl.setDrawingBufferSize(width, height, ratio);
+        bufferWidth = width;
+        bufferHeight = height;
+        bufferRatio = ratio;
     }
 
     function schedule() {
@@ -167,6 +181,7 @@ export function createRenderer(onTossStart, initialScale) {
             position(batch.overflow, -width * 0.04, Math.min(gridTop + size * 1.5, height / 2 - 12), settled);
         }
         try {
+            resizeBuffer(moving);
             webgl.render(scene, camera);
         } catch (error) {
             console.warn("Quick Toss | Drawing stopped", error);

@@ -65,12 +65,29 @@ function planFaces(spec) {
         && source[target].index === resultFace && shape === (spec.type === "d100" ? "d10" : spec.type) };
 }
 
+function fitToSlot(object, target) {
+    const fitted = new Group();
+    fitted.add(object);
+    fitted.quaternion.copy(target);
+    // Measure the landed silhouette so depth and the model's source orientation do not affect its size.
+    const bounds = new Box3().setFromObject(fitted, true);
+    const { x, y } = bounds.getSize(new Vector3());
+    const span = Math.max(x, y);
+    if (!Number.isFinite(span) || span <= 0) return null;
+
+    fitted.quaternion.identity();
+    object.position.sub(bounds.getCenter(new Vector3()).applyQuaternion(target.clone().invert()));
+    fitted.scale.setScalar(2 / span);
+    return fitted;
+}
+
 function modelDie(spec, scene, plan) {
     const clone = scene.clone(true);
-    const box = new Box3().setFromObject(clone);
-    const center = box.getCenter(new Vector3());
-    const size = box.getSize(new Vector3()).length();
-    if (!Number.isFinite(size) || size <= 0) return null;
+    const { normal, up } = plan.faces[plan.target];
+    const direction = plan.shape === "d4" ? normal.clone().negate() : normal;
+    const target = faceRotation(direction, up);
+    const object = fitToSlot(clone, target);
+    if (!object) return null;
     const materials = new Map();
     clone.traverse((child) => {
         if (!child.isMesh) return;
@@ -85,15 +102,8 @@ function modelDie(spec, scene, plan) {
         };
         child.material = Array.isArray(child.material) ? child.material.map(simple) : simple(child.material);
     });
-    clone.position.sub(center);
-    const normalized = new Group();
-    normalized.add(clone);
-    normalized.scale.setScalar(2.25 / size);
-    const { normal, up } = plan.faces[plan.target];
-    const direction = plan.shape === "d4" ? normal.clone().negate() : normal;
-    const target = faceRotation(direction, up);
     return {
-        object: normalized, target,
+        object, target,
         badge: !plan.modelFaceKnown || spec.coin || (spec.type === "d10" && !spec.percentile && spec.value === 10)
             ? displayValue(spec) : null,
         dispose() { for (const material of materials.values()) material.dispose(); },
@@ -195,9 +205,10 @@ function proceduralDie(spec, plan, art, mark) {
     const material = new MeshLambertMaterial({ map: texture });
     const interior = spec.preset?.interior && installInterior(material, spec.preset.interior, mark?.img);
     const face = plan.faces[plan.target];
+    const target = faceRotation(face.normal, face.up);
     return {
-        object: new Mesh(geometry, material),
-        target: faceRotation(face.normal, face.up),
+        object: fitToSlot(new Mesh(geometry, material), target),
+        target,
         setInteriorProgress: interior?.setProgress,
         dispose() {
             interior?.dispose();
